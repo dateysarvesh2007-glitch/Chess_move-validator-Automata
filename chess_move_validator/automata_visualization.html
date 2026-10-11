@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Move Validator - Automata Theory Visualization</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .tab-container {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+        }
+        .tab {
+            padding: 12px 24px;
+            background-color: #ecf0f1;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-top-left-radius: 6px;
+            border-top-right-radius: 6px;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background-color: #3498db;
+            color: white;
+            border-bottom: 2px solid #3498db;
+        }
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.5s;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .visualization-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        .viz-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .viz-header {
+            background-color: #3498db;
+            color: white;
+            padding: 16px 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .viz-body {
+            padding: 20px;
+        }
+        .dfa-diagram {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .state-node {
+            display: inline-block;
+            width: 80px;
+            height: 50px;
+            line-height: 50px;
+            text-align: center;
+            border-radius: 50px;
+            font-weight: bold;
+            margin: 10px;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .state-node.start {
+            background-color: #3498db;
+            color: white;
+            box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+        }
+        .state-node.accepting {
+            background-color: #27ae60;
+            color: white;
+            box-shadow: 0 4px 8px rgba(39, 174, 96, 0.3);
+            border: 3px solid #2ecc71;
+        }
+        .state-node.rejecting {
+            background-color: #e74c3c;
+            color: white;
+            box-shadow: 0 4px 8px rgba(231, 76, 60, 0.3);
+        }
+        .state-node.transient {
+            background-color: #f39c12;
+            color: white;
+            box-shadow: 0 4px 8px rgba(243, 156, 18, 0.3);
+        }
+        .transition-arrow {
+            display: inline-block;
+            width: 60px;
+            text-align: center;
+            margin: 0 10px;
+            color: #2c3e50;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .transition-label {
+            display: block;
+            background-color: #ecf0f1;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin: 4px 0;
+        }
+        .fsm-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        .fsm-table th, .fsm-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .fsm-table th {
+            background-color: #3498db;
+            color: white;
+        }
+        .fsm-table tr:hover {
+            background-color: #f5f5f5;
+        }
+        .layer-flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 25px 0;
+        }
+        .layer-box {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            min-width: 120px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .layer-connector {
+            font-size: 24px;
+            color: #2c3e50;
+            font-weight: bold;
+        }
+        .info-box {
+            background-color: #e8f4fc;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .equation {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+            margin: 15px 0;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-box {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+            display: block;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chess Move Validator - Automata Theory Deep Dive</h1>
+        <p style="text-align: center; color: #7f8c8d; max-width: 800px; margin: 0 auto 30px;">
+            Visualizing the Four-Layer Architecture: How DFAs, FSMs, and Logic Combine to Validate Chess Moves
+        </p>
+
+        <div class="tab-container">
+            <div class="tab active" onclick="openTab(event, 'layer1')">Layer 1: Piece DFAs</div>
+            <div class="tab" onclick="openTab(event, 'layer2')">Layer 2: History FSM</div>
+            <div class="tab" onclick="openTab(event, 'layer3')">Layer 3: Move Sequencing</div>
+            <div class="tab" onclick="openTab(event, 'layer4')">Layer 4: Safety & Check</div>
+            <div class="tab" onclick="openTab(event, 'integration')">Full Integration</div>
+        </div>
+
+        <div id="layer1" class="tab-content active">
+            <h2>Layer 1: Deterministic Finite Automata (DFAs) for Piece Movement</h2>
+            <p class="info-box">
+                Each chess piece type has its own DFA that validates whether a move follows the piece's movement rules.
+                The DFA processes the move as a sequence of checks, transitioning through states based on board conditions.
+            </p>
+
+            <div class="visualization-grid">
+                <div class="viz-card">
+                    <div class="viz-header">Knight DFA</div>
+                    <div class="viz-body">
+                        <div class="dfa-diagram">
+                            <div style="text-align: center; margin-bottom: 15px;">
+                                <div class="state-node start">START</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">VALID_L_SHAPE<br>(2+1 or 1+2)</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">DESTINATION_REACHED</div>
+                            </div>
+                            <div style="text-align: center; margin: 15px 0;">
+                                <div class="state-node reject">INVALID_L_SHAPE</div>
+                                <div style="margin: 10px 0;">(Wrong L-shape)</div>
+                                <div class="state-node reject">INVALID_DESTINATION</div>
+                                <div style="margin: 10px 0;">(Friendly piece)</div>
+                            </div>
+                            <div class="transition-label">Not L-shaped movement</div>
+                            <div class="transition-label">Friendly piece on destination</div>
+                        </div>
+                        <div class="info-box">
+                            <strong>Alphabet (Input Conditions):</strong><br>
+                            • Forms L-shape? (|Δr|=2,|Δc|=1) OR (|Δr|=1,|Δc|=2)<br>
+                            • Destination empty?<br>
+                            • Destination has enemy piece?<br>
+                            • Destination has friendly piece?<br>
+                            • Same square?
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">Rook DFA</div>
+                    <div class="viz-body">
+                        <div class="dfa-diagram">
+                            <div style="text-align: center; margin-bottom: 15px;">
+                                <div class="state-node start">START</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">SAME_ROW/SAME_COL</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">PATH_CLEAR*</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">DESTINATION_REACHED</div>
+                            </div>
+                            <div style="text-align: center; margin: 15px 0;">
+                                <div class="state-node reject">BLOCKED</div>
+                                <div style="margin: 10px 0;">(Path obstruction)</div>
+                                <div class="state-node reject">INVALID_DIRECTION</div>
+                                <div style="margin: 10px 0;">(Not horizontal/vertical)</div>
+                                <div class="state-node reject">INVALID_DESTINATION</div>
+                                <div style="margin: 10px 0;">(Friendly piece)</div>
+                            </div>
+                            <div class="transition-label">Not horizontal/vertical</div>
+                            <div class="transition-label">Path blocked</div>
+                            <div class="transition-label">Friendly piece on destination</div>
+                        </div>
+                        <div class="info-box">
+                            <strong>Key Feature:</strong> Path checking - processes one square at a time<br>
+                            <strong>States Track:</strong> Direction, path clearance, destination validity
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">Bishop DFA</div>
+                    <div class="viz-body">
+                        <div class="dfa-diagram">
+                            <div style="text-align: center; margin-bottom: 15px;">
+                                <div class="state-node start">START</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">SAME_DIAGONAL</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">PATH_CLEAR*</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">DESTINATION_REACHED</div>
+                            </div>
+                            <div style="text-align: center; margin: 15px 0;">
+                                <div class="state-node reject">BLOCKED</div>
+                                <div class="state-node reject">NOT_DIAGONAL</div>
+                                <div class="state-node reject">INVALID_DESTINATION</div>
+                            </div>
+                            <div class="transition-label">Not diagonal movement</div>
+                            <div class="transition-label">Path blocked</div>
+                            <div class="transition-label">Friendly piece on destination</div>
+                        </div>
+                        <div class="info-box">
+                            <strong>Movement:</strong> Any number of squares diagonally<br>
+                            <strong>Constraint:</strong> Must stay on same color squares
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">Queen DFA</div>
+                    <div class="viz-body">
+                        <div class="dfa-diagram">
+                            <div style="text-align: center; margin-bottom: 15px;">
+                                <div class="state-node start">START</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">DIRECTION_CHECK</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">PATH_CLEAR*</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">DESTINATION_REACHED</div>
+                            </div>
+                            <div style="text-align: center; margin: 15px 0;">
+                                <div class="state-node reject">BLOCKED</div>
+                                <div class="state-node reject">INVALID_DIRECTION</div>
+                                <div class="state-node reject">INVALID_DESTINATION</div>
+                            </div>
+                            <div class="transition-label">Not horizontal/vertical/diagonal</div>
+                            <div class="transition-label">Path blocked</div>
+                            <div class="transition-label">Friendly piece on destination</div>
+                        </div>
+                        <div class="info-box">
+                            <strong>Combines:</strong> Rook + Bishop movement capabilities<br>
+                            <strong>Most versatile:</strong> Can move in 8 directions
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="layer2" class="tab-content">
+            <h2>Layer 2: History-Dependent Finite State Machine</h2>
+            <p class="info-box>
+                Unlike the DFAs in Layer 1 which only need current board state, this FSM requires access to historical
+                information to validate history-dependent rules like castling and en passant.
+            </p>
+
+            <div class="visualization-grid">
+                <div class="viz-card">
+                    <div class="viz-header">Castling Rights FSM</div>
+                    <div class="viz-body">
+                        <h3>State Tracking:</h3>
+                        <table class="fsm-table">
+                            <thead>
+                                <tr>
+                                    <th>State Variable</th>
+                                    <th>Initial Value</th>
+                                    <th>Updated When</th>
+                                    <th>Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>white.kingside</td>
+                                    <td>true</td>
+                                    <td>White king or h1 rook moves</td>
+                                    <td>Can castle O-O?</td>
+                                </tr>
+                                <tr>
+                                    <td>white.queenside</td>
+                                    <td>true</td>
+                                    <td>White king or a1 rook moves</td>
+                                    <td>Can castle O-O-O?</td>
+                                </tr>
+                                <tr>
+                                    <td>black.kingside</td>
+                                    <td>true</td>
+                                    <td>Black king or h8 rook moves</td>
+                                    <td>Can castle O-O?</td>
+                                </tr>
+                                <tr>
+                                    <td>black.queenside</td>
+                                    <td>true</td>
+                                    <td>Black king or a8 rook moves</td>
+                                    <td>Can castle O-O-O?</td>
+                                </tr>
+                            </tbody>
+                        </table>
+
+                        <div class="info-box">
+                            <strong>Why FSM?</strong><br>
+                            Castling requires knowing if a piece has <em>ever moved</em> in the entire game history.
+                            A DFA has fixed memory (finite states), but tracking "has this ever happened?"
+                            requires unbounded memory - hence we need an FSM.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">En Passant FSM</div>
+                    <div class="viz-body">
+                        <h3>State Variables:</h3>
+                        <ul>
+                            <li><strong>en_passant_target</strong>: Square where en passant capture is possible (or null)</li>
+                            <li><strong>last_move</strong>: The immediately previous move (for en passant validation)</li>
+                        </ul>
+
+                        <h3>FSM Transition Logic:</h3>
+                        <div class="dfa-diagram" style="text-align: center;">
+                            <div style="margin-bottom: 15px;">
+                                <div class="state-node start">NO_EN_PASSANT</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">PAWN_DOUBLE_ADVANCE</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">EN_PASSANT_AVAILABLE</div>
+                            </div>
+                            <div style="margin: 15px 0;">
+                                <div class="state-node">EN_PASSANT_AVAILABLE</div>
+                                <div class="transition-arrow">→ (after opponent move)</div>
+                                <div class="state-node">NO_EN_PASSANT</div>
+                            </div>
+                        </div>
+
+                        <div class="info-box">
+                            <strong>Window of Opportunity:</strong><br>
+                            En passant is only available <em>immediately after</em> an opponent's two-square pawn advance.
+                            This requires remembering the <em>exact previous move</em> - another reason why DFAs are insufficient.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">FSM vs DFA Comparison</div>
+                    <div class="viz-body">
+                        <div class="equation">
+                            DFA Memory: O(1) - Fixed number of states<br>
+                            FSM Memory: O(n) - Can grow with input length (move history)
+                        </div>
+
+                        <div class="stats-grid">
+                            <div class="stat-box">
+                                <div class="stat-number">Layer 1 (DFAs)</div>
+                                <div class="stat-number">Fixed States</div>
+                                <div class="stat-label">Memory: Constant</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-number">Layer 2 (FSM)</div>
+                                <div class="stat-number">Growing States</div>
+                                <div class="stat-label">Memory: Linear in moves</div>
+                            </div>
+                        </div>
+
+                        <div class="info-box">
+                            <strong>Computational Hierarchy:</strong><br>
+                            This clearly demonstrates:<br>
+                            • <strong>Regular Languages</strong> (Layer 1): Solvable by DFAs<br>
+                            • <strong>Context-Sensitive Languages</strong> (Layer 2): Require FSMs<br>
+                            • The chess move validation problem sits at Level 2 of this hierarchy
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="layer3" class="tab-content">
+            <h2>Layer 3: Move Sequencing and Turn Management</h2>
+            <p class="info-box>
+                This layer treats chess as a sequence processing problem, where each move is an input symbol that
+                transitions the game state. It coordinates the validation pipeline and manages turn-based progression.
+            </p>
+
+            <div class="viz-card">
+                <div class="viz-header">Move Validation Pipeline</div>
+                <div class="viz-body">
+                    <div class="layer-flow">
+                        <div class="layer-box">Input<br>Move Symbol</div>
+                        <div class="layer-connector">→</div>
+                        <div class="layer-box">Layer 1<br>Piece DFA</div>
+                        <div class="layer-connector">→</div>
+                        <div class="layer-box">Layer 2<br>History FSM</div>
+                        <div class="layer-connector">→</div>
+                        <div class="layer-box">Temp<br>Apply Move</div>
+                        <div class="layer-connector">→</div>
+                        <div class="layer-box">Layer 4<br>Safety Check</div>
+                        <div class="layer-connector">→</div>
+                        <div class="layer-box">Accept/Reject<br>+ Update State</div>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>Sequential Processing:</strong><br>
+                        Each move validates against the <em>current game state</em>. Valid moves update the state,
+                        affecting validation of subsequent moves. Invalid moves terminate the sequence.
+                    </div>
+                </div>
+            </div>
+
+            <div class="viz-card">
+                <div class="viz-header">Turn Management FSM</div>
+                <div class="viz-body">
+                    <div class="dfa-diagram" style="text-align: center;">
+                        <div class="state-node start">WHITE_TURN</div>
+                        <div class="transition-arrow">→</div>
+                        <div class="state-node accepting">BLACK_TURN</div>
+                        <div class="transition-arrow">→</div>
+                        <div class="state-node accepting">WHITE_TURN</div>
+                    </div>
+                    <div class="transition-label">After valid black move</div>
+                    <div class="transition-label">After valid white move</div>
+
+                    <div class="info-box">
+                        <strong>Simple Alternation:</strong><br>
+                        White moves first, then players alternate turns.
+                        This is a simple 2-state FSM that tracks whose turn it is.
+                    </div>
+                </div>
+            </div>
+
+            <div class="viz-card">
+                <div class="viz-header">Game State Evolution</div>
+                <div class="viz-body">
+                    <h3>State Components Tracked:</h3>
+                    <ul>
+                        <li><strong>Board Position</strong>: 8×grid with piece placement</li>
+                        <li><strong>Turn Indicator</strong>: white/black</li>
+                        <li><strong>Castling Rights</strong>: 4 boolean flags</li>
+                        <li><strong>En Passant Target</strong>: 1 square or null</li>
+                        <li><strong>Move History</strong>: Sequence of all moves</li>
+                    </ul>
+
+                    <div class="info-box">
+                        <strong>State Size:</strong><br>
+                        • Board: 64 squares × 13 possibilities (empty + 6 white + 6 black pieces) = ~8.3 bits/square<br>
+                        • Additional tracking: ~16 bits<br>
+                        • Total game state: ~550 bits of information<br>
+                        <br>
+                        This demonstrates how Layer 3 manages evolving state through the move sequence.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="layer4" class="tab-content">
+            <h2>Layer 4: Safety Filter and Check Detection</h2>
+            <p class="info-box>
+                This layer implements the king safety check using logical operations over Layer 1 movement logic,
+                demonstrating the computational concept of OR combination and negation.
+            </p>
+
+            <div class="visualization-grid">
+                <div class="viz-card">
+                    <div class="viz-header">Safety Filter Logic</div>
+                    <div class="viz-body">
+                        <div class="equation">
+                            Move is SAFE iff:<br>
+                            ¬(∃ opponent piece p: CAN_ATTACK(p, our_king_after_move))
+                        </div>
+
+                        <div class="info-box">
+                            <strong>De Morgan's Law Application:</strong><br>
+                            Instead of checking if ALL pieces are safe (AND), we check if ANY piece attacks (OR)<br>
+                            and negate the result. This is computationally more efficient.
+                        </div>
+
+                        <div class="dfa-diagram" style="text-align: center;">
+                            <div style="margin-bottom: 15px;">
+                                <div class="state-node">Find Our King</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">Check All Opponent Pieces</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">OR-Combine Attacks</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">¬(Any Attacker) = SAFE</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node rejecting">(Any Attacker) = UNSAFE</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">Check Detector Logic</div>
+                    <div class="viz-body">
+                        <div class="equation">
+                            Move gives CHECK iff:<br>
+                            ∃ our piece p: CAN_ATTACK(p, opponent_king_after_move)
+                        </div>
+
+                        <div class="info-box">
+                            <strong>Symmetric Logic:</strong><br>
+                            Safety Filter: ¬(opponent can attack us)<br>
+                            Check Detector: (we can attack opponent)<br>
+                            Both reuse the SAME Layer 1 movement logic!
+                        </div>
+
+                        <div class="dfa-diagram" style="text-align: center;">
+                            <div style="margin-bottom: 15px;">
+                                <div class="state-node">Find Opponent King</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">Check All Our Pieces</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">OR-Combine Attacks</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">(Any Attacker) = CHECK (+)</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">¬(Any Attacker) = NO CHECK</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="viz-card">
+                    <div class="viz-header">Logic Reuse Demonstration</div>
+                    <div class="viz-body">
+                        <h3>Shared Components:</h3>
+                        <ul>
+                            <li><strong>RookDFA</strong>: Used for move validation AND attack detection</li>
+                            <li><strong>BishopDFA</strong>: Used for move validation AND attack detection</li>
+                            <li><strong>KnightDFA</strong>: Used for move validation AND attack detection</li>
+                            <li><strong>Etc.</strong> for all piece types</li>
+                        </ul>
+
+                        <div class="info-box">
+                            <strong>Architectural Benefit:</strong><br>
+                            • No duplicated movement logic<br>
+                            • Consistent behavior between validation and attack detection<br>
+                            • Easy to modify - change in one place affects both uses<br>
+                            • Demonstrates separation of concerns and modular design
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="integration" class="tab-content">
+            <h2>Full Four-Layer Integration</h2>
+            <p class="info-box>
+                See how all four layers work together to validate a single chess move, demonstrating the
+                complete automata theory architecture.
+            </p>
+
+            <div class="viz-card">
+                <div class="viz-header">Complete Validation Flow</div>
+                <div class="viz-body">
+                    <div style="text-align: center; margin: 30px 0;">
+                        <div class="dfa-diagram" style="display: inline-block; text-align: left; min-width: 800px;">
+                            <div style="margin-bottom: 20px;">
+                                <div class="state-node start">INPUT:<br>e2→e4</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">LAYER 1:<br>Pawn DFA</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">Valid pawn move?</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">LAYER 2:<br>History FSM</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">Castling/EP valid?</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">TEMP STATE:<br>Apply move to copy</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node transient">LAYER 4:<br>Safety Filter</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">Is white king safe?</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node accepting">ACCEPT:<br>Update real state</div>
+                                <div class="transition-arrow">→</div>
+                                <div class="state-node">OUTPUT:<br>e4 (+ if check)</div>
+                            </div>
+
+                            <div style="position: absolute; top: 80px; left: 200px; background: #fff3cd; padding: 10px; border-radius: 4px; border: 1px solid #ffeaa7;">
+                                <strong>Rejection Paths:</strong><br>
+                                • Layer 1: Invalid pawn movement<br>
+                                • Layer 2: Castling/EP rights violated<br>
+                                • Layer 4: Would leave king in check
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>Example Validation Trace:</strong><br>
+                        Move: e2→e4 (White pawn two-square advance)<br><br>
+
+                        <strong>Layer 1 (Pawn DFA):</strong><br>
+                        START → TWO_SQUARE_ADVANCE → DESTINATION_REACHED ✓<br>
+                        Reason: Legal two-square pawn advance from starting rank<br><br>
+
+                        <strong>Layer 2 (History FSM):</strong><br>
+                        Check castling rights: No change needed ✓<br>
+                        Check en passant: Sets target to e3 ✓<br><br>
+
+                        <strong>Layer 3 (Temp State):</strong><br>
+                        Move applied to game state copy<br><br>
+
+                        <strong>Layer 4 (Safety Filter):</strong><br>
+                        Find white king: e1<br>
+                        Check if black pieces can attack e1: No ✓<br>
+                        Result: SAFE<br><br>
+
+                        <strong>Result:</strong> ACCEPTED - e4 (no check)
+                    </div>
+                </div>
+            </div>
+
+            <div class="viz-card">
+                <div class="viz-header">Computational Complexity Analysis</div>
+                <div class="viz-body">
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-number">O(1)</div>
+                            <div class="stat-number">Layer 1</div>
+                            <div class="stat-label">Per-piece movement (DFAs)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">O(1)</div>
+                            <div class="stat-number">Layer 2</div>
+                            <div class="stat-label">History tracking (FSM)</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">O(n)</div>
+                            <div class="stat-number">Layer 3</div>
+                            <div class="stat-label">Move sequence processing</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">O(m)</div>
+                            <div class="stat-number">Layer 4</div>
+                            <div class="stat-label">King safety check (m = opponent pieces)</div>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>Overall Complexity:</strong><br>
+                        O(m) where m ≤ 16 (number of opponent pieces)<br>
+                        Effectively O(1) - constant time validation!<br><br>
+
+                        <strong>Why This Matters:</strong><br>
+                        Despite the complex layered architecture, move validation remains
+                        computationally efficient - suitable for real-time applications.
+                    </div>
+                </div>
+            </div>
+
+            <div class="viz-card">
+                <div class="viz-header">Educational Value Summary</div>
+                <div class="viz-body">
+                    <h3>Automata Theory Concepts Demonstrated:</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <div class="stat-number">✓</div>
+                            <div class="stat-number">DFAs</div>
+                            <div class="stat-layer">Layer 1</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">✓</div>
+                            <div class="stat-number">FSMs</div>
+                            <div class="stat-layer">Layer 2</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">✓</div>
+                            <div class="stat-number">Sequential Processing</div>
+                            <div class="stat-layer">Layer 3</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number">✓</div>
+                            <div class="stat-number">Boolean Logic (OR/NOT)</div>
+                            <div class="stat-layer">Layer 4</div>
+                        </div>
+                    </div>
+
+                    <div class="info-box">
+                        <strong>Clear Separation of Concerns:</strong><br>
+                        • Layer 1: What movements are geometrically possible<br>
+                        • Layer 2: What movements are historically allowed<br>
+                        • Layer 3: Processing moves in sequence with turn management<br>
+                        • Layer 4: What movements are tactically safe<br><br>
+
+                        <strong>Beautiful Code Reuse:</strong><br>
+                        Layer 1 DFAs are reused by:<br>
+                        • Move validation (Layers 1,3)<br>
+                        • Attack detection (Layers 4, Check Detector)<br>
+                        • demonstrating separation of mechanism from policy
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openTab(evt, tabName) {
+            // Hide all tab contents
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+
+            // Deactivate all tabs
+            const tabs = document.getElementsByClassName('tab');
+            for (let i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
+
+            // Activate current tab
+            document.getElementById(tabName).classList.add('active');
+            evt.currentTarget.classList.add('active');
+        }
+    </script>
+</body>
+</html>

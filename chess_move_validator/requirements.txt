@@ -1,0 +1,6 @@
+# Chess Move Legality Checker - Requirements
+# This project uses only Python standard library
+# No external dependencies required for core functionality
+
+# For testing (optional)
+pytest>=6.0.0
