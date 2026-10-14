@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Move Validator - Game State Evolution</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .move-frame {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: transform 0.3s;
+        }
+        .move-frame:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .frame-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .move-number {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .move-notation {
+            font-size: 20px;
+            font-weight: bold;
+            background-color: #e8f4fc;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .frame-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        .board-container {
+            position: relative;
+        }
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 3px solid #333;
+            margin: 10px auto;
+        }
+        .square {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            user-select: none;
+        }
+        .white-square {
+            background-color: #f0d9b5;
+        }
+        .black-square {
+            background-color: #b58863;
+        }
+        .piece {
+            font-size: 36px;
+        }
+        .state-panel {
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .state-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .state-item:last-child {
+            border-bottom: none;
+        }
+        .state-label {
+            font-weight: 500;
+            color: #34495e;
+        }
+        .state-value {
+            font-family: 'Courier New', monospace;
+            background-color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #ddd;
+        }
+        .highlight-change {
+            background-color: #fff3cd;
+            border-color: #ffeaa7;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { background-color: #fff3cd; }
+            50% { background-color: #ffeaa7; }
+            100% { background-color: #fff3cd; }
+        }
+        .validation-steps {
+            background-color: #e8f4fc;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin: 10px 0;
+        }
+        .step-number {
+            background-color: #3498db;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex-grow: 1;
+        }
+        .step-layer {
+            font-weight: bold;
+            color: #2c3e50;
+            text-transform: uppercase;
+            font-size: 14px;
+        }
+        .step-description {
+            margin-top: 4px;
+            color: #5d6d7e;
+            font-size: 13px;
+        }
+        .step-result {
+            margin-top: 4px;
+            font-weight: bold;
+        }
+        .result-accepted {
+            color: #27ae60;
+        }
+        .result-rejected {
+            color: #e74c3c;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        .stats-summary {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .stat-box {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+        .stat-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #3498db;
+            display: block;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #7f8c8d;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chess Move Validator - Game State Evolution</h1>
+        <p style="text-align: center; color: #7f8c8d; max-width: 900px; margin: 0 auto 30px;">
+            Visualizing Internal State Changes During a Sample Game Sequence
+        </p>
+
+        <!-- Sample Game: Scholar's Mate Attempt -->
+        <div class="timeline">
+            <!-- Initial Position -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">0</div>
+                    <div>Initial Position</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board0">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn0">White</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling0">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling0">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value" id="enPassant0">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount0">0</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps (Initial State)</h3>
+                        <p>No move to validate - this is the starting position</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move 1: e4 -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">1</div>
+                    <div class="move-notation">e4</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board1">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn1">Black</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling1">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling1">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value highlight-change" id="enPassant1">e3</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount1">1</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps for e2→e4</h3>
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 1</div>
+                                <div class="step-description">Pawn DFA validation</div>
+                                <div class="step-result result-accepted">✓ Legal two-square advance</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 2</div>
+                                <div class="step-description">History FSM check</div>
+                                <div class="step-result result-accepted">✓ Sets en passant target e3</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 3</div>
+                                <div class="step-description">Temp state application</div>
+                                <div class="step-result result-accepted">✓ Move applied to copy</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 4</div>
+                                <div class="step-description">Safety filter (king check)</div>
+                                <div class="step-result result-accepted">✓ White king safe</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-layer">CHECK DETECTOR</div>
+                                <div class="step-description">Check detection</div>
+                                <div class="step-result result-accepted">○ No check given</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move 2: e5 -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">2</div>
+                    <div class="move-notation">e5</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board2">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn2">White</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling2">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling2">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value" id="enPassant2">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount2">2</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps for e7→e5</h3>
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 1</div>
+                                <div class="step-description">Pawn DFA validation</div>
+                                <div class="step-result result-accepted">✓ Legal two-square advance</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 2</div>
+                                <div class="step-description">History FSM check</div>
+                                <div class="step-result result-accepted">✓ Resets en passant (black move)</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 3</div>
+                                <div class="step-description">Temp state application</div>
+                                <div class="step-result result-accepted">✓ Move applied to copy</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 4</div>
+                                <div class="step-description">Safety filter (king check)</div>
+                                <div class="step-result result-accepted">✓ Black king safe</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-layer">CHECK DETECTOR</div>
+                                <div class="step-description">Check detection</div>
+                                <div class="step-result result-accepted">○ No check given</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move 3: Bc4 -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">3</div>
+                    <div class="move-notation">Bc4</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board3">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn3">Black</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling3">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling3">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value" id="enPassant3">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount3">3</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps for f1→c4</h3>
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 1</div>
+                                <div class="step-description">Bishop DFA validation</div>
+                                <div class="step-result result-accepted">✓ Clear diagonal path</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 2</div>
+                                <div class="step-description">History FSM check</div>
+                                <div class="step-result result-accepted">✓ No castling/EP implications</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 3</div>
+                                <div class="step-description">Temp state application</div>
+                                <div class="step-result result-accepted">✓ Move applied to copy</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 4</div>
+                                <div class="step-description">Safety filter (king check)</div>
+                                <div class="step-result result-accepted">✓ White king safe</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-layer">CHECK DETECTOR</div>
+                                <div class="step-description">Check detection</div>
+                                <div class="step-result result-accepted">○ No check given</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move 4: Qh5 -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">4</div>
+                    <div class="move-notation">Qh5</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board4">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn4">White</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling4">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling4">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value" id="enPassant4">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount4">4</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps for d8→h5</h3>
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 1</div>
+                                <div class="step-description">Queen DFA validation</div>
+                                <div class="step-result result-accepted">✓ Clear diagonal path</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 2</div>
+                                <div class="step-description">History FSM check</div>
+                                <div class="step-result result-accepted">✓ No castling/EP implications</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 3</div>
+                                <div class="step-description">Temp state application</div>
+                                <div class="step-result result-accepted">✓ Move applied to copy</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 4</div>
+                                <div class="step-description">Safety filter (king check)</div>
+                                <div class="step-result result-accepted">✓ Black king safe</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-layer">CHECK DETECTOR</div>
+                                <div class="step-description">Check detection</div>
+                                <div class="step-result result-accepted">✓ BLACK KING IN CHECK! (+)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move 5: Mate? -->
+            <div class="move-frame">
+                <div class="frame-header">
+                    <div class="move-number">5</div>
+                    <div class="move-notation">Qf7#</div>
+                </div>
+                <div class="frame-body">
+                    <div class="board-container" id="board5">
+                        <!-- Board will be populated by JS -->
+                    </div>
+                    <div class="state-panel">
+                        <h3>Game State</h3>
+                        <div class="state-item">
+                            <span class="state-label">Current Turn:</span>
+                            <span class="state-value" id="turn5">Black</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">White Castling:</span>
+                            <span class="state-value" id="whiteCastling5">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Black Castling:</span>
+                            <span class="state-value" id="blackCastling5">Kingside: Yes, Queenside: Yes</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">En Passant Target:</span>
+                            <span class="state-value" id="enPassant5">None</span>
+                        </div>
+                        <div class="state-item">
+                            <span class="state-label">Move Count:</span>
+                            <span class="state-value" id="moveCount5">5</span>
+                        </div>
+                    </div>
+                    <div class="validation-steps">
+                        <h3>Validation Steps for h5→f7</h3>
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 1</div>
+                                <div class="step-description">Queen DFA validation</div>
+                                <div class="step-result result-accepted">✓ Diagonal to f7</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 2</div>
+                                <div class="step-description">History FSM check</div>
+                                <div class="step-result result-accepted">✓ No castling/EP implications</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 3</div>
+                                <div class="step-description">Temp state application</div>
+                                <div class="step-result result-accepted">✓ Move applied to copy</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <div class="step-layer">LAYER 4</div>
+                                <div class="step-description">Safety filter (king check)</div>
+                                <div class="step-result result-accepted">✓ White king safe</div>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">5</div>
+                            <div class="step-content">
+                                <div class="step-layer">CHECK DETECTOR</div>
+                                <div class="step-description">Check detection</div>
+                                <div class="step-result result-accepted">✓ BLACK KING IN CHECKMATE! (#)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-summary">
+            <h2>Educational Insights: What This Shows About Internal State Changes</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <div class="stat-value">5</div>
+                    <div class="stat-label">Moves Tracked</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">64</div>
+                    <div class="stat-label">Board Squares Monitored</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">5</div>
+                    <div class="stat-label">State Variables Tracked</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">1</div>
+                    <div class="stat-label">Checkmate Achieved</div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <h3>Key Internal State Changes Demonstrated:</h3>
+                <ul>
+                    <li><strong>Turn Alternation:</strong> White → Black → White → Black → White → Black</li>
+                    <li><strong>En Passant Tracking:</strong> Set after e4 (e3), cleared after black's response</li>
+                    <li><strong>Piece Movement:</strong> Visual tracking of each piece's journey across the board</li>
+                    <li><strong>Check Detection:</strong> Move 4 shows black king in check (+)</li>
+                    <li><strong>Checkmate:</strong> Move 5 shows checkmate (#) - king cannot escape</li>
+                    <li><strong>Castling Rights:</strong> Remain intact throughout this short game (no king/rook movement)</li>
+                </ul>
+
+                <h3>Why This Matters for Automata Theory:</h3>
+                <ul>
+                    <li>Shows how <strong>finite state</strong> evolves through <strong>discrete transitions</strong></li>
+                    <li>Demonstrates <strong>layered validation</strong> - each layer adds specific constraints</li>
+                    <li>Illustrates <strong>history dependence</strong> - en passant requires remembering last move</li>
+                    <li>Shows <strong>sequential processing</strong> - each move affects validation of next move</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize all boards with the evolving game state
+        const gameStates = [
+            // Initial position
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': '♗', 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': '♙', 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♟', 'f7': '♟', 'g7': '♟', 'h7': '♟',
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                turn: 'white',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: null,
+                moveCount: 0
+            },
+            // After 1. e4
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': '♗', 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': null, 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♙', 'f7': '♟', 'g7': '♟', 'h7': '♟',
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                turn: 'black',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: 'e3',
+                moveCount: 1
+            },
+            // After 1... e5
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': '♗', 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': null, 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': null, 'f7': '♟', 'g7': '♟', 'h7': '♟',
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                turn: 'white',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: null,
+                moveCount: 2
+            },
+            // After 2. Bc4
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': null, 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': null, 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♙', 'f7': '♟', 'g7': '♟', 'h7': '♟',
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                'c4': '♗',
+                turn: 'black',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: null,
+                moveCount: 3
+            },
+            // After 2... Qh5
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': null, 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': null, 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♙', 'f7': '♟', 'g7': '♟', 'h7': null,
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': null, 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                'c4': '♗', 'h5': '♛',
+                turn: 'white',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: null,
+                moveCount: 4
+            },
+            // After 3. Qf7# (checkmate)
+            {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': null, 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': null, 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♙', 'f7': '♛', 'g7': '♟', 'h7': null,
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': null, 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+                'c4': '♗', 'f7': '♛',
+                turn: 'black',
+                whiteCastling: {kingside: true, queenside: true},
+                blackCastling: {kingside: true, queenside: true},
+                enPassant: null,
+                moveCount: 5
+            }
+        ];
+
+        // Initialize all boards
+        for (let i = 0; i < gameStates.length; i++) {
+            initializeBoard(i, gameStates[i]);
+            updateStateDisplay(i, gameStates[i]);
+        }
+
+        function initializeBoard(frameIndex, state) {
+            const boardElement = document.getElementById(`board${frameIndex}`);
+            boardElement.innerHTML = '';
+
+            // Create board squares
+            for (let row = 7; row >= 0; row--) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = 'square';
+
+                    // Alternate colors
+                    const isDark = (row + col) % 2 === 1;
+                    square.classList.add(isDark ? 'black-square' : 'white-square');
+
+                    // Add coordinates
+                    const file = String.fromCharCode(97 + col); // a-h
+                    const rank = row + 1; // 1-8
+                    const position = file + rank;
+
+                    // Add piece if present
+                    if (state[position]) {
+                        const piece = document.createElement('div');
+                        piece.className = 'piece';
+                        piece.textContent = state[position];
+                        square.appendChild(piece);
+                    }
+
+                    // Add coordinate labels on edges (only for first and last boards to reduce clutter)
+                    if (frameIndex === 0 || frameIndex === gameStates.length - 1) {
+                        if (col === 0) {
+                            const rankLabel = document.createElement('div');
+                            rankLabel.className = 'rank-label';
+                            rankLabel.textContent = rank;
+                            square.appendChild(rankLabel);
+                        }
+                        if (row === 0) {
+                            const fileLabel = document.createElement('div');
+                            fileLabel.className = 'file-label';
+                            fileLabel.textContent = file;
+                            square.appendChild(fileLabel);
+                        }
+                    }
+
+                    boardElement.appendChild(square);
+                }
+            }
+        }
+
+        function updateStateDisplay(frameIndex, state) {
+            document.getElementById(`turn${frameIndex}`).textContent =
+                state.turn.charAt(0).toUpperCase() + state.turn.slice(1);
+
+            document.getElementById(`whiteCastling${frameIndex}`).textContent =
+                `Kingside: ${state.whiteCastling.kingside ? 'Yes' : 'No'}, Queenside: ${state.whiteCastling.queenside ? 'Yes' : 'No'}`;
+
+            document.getElementById(`blackCastling${frameIndex}`).textContent =
+                `Kingside: ${state.blackCastling.kingside ? 'Yes' : 'No'}, Queenside: ${state.blackCastling.queenside ? 'Yes' : 'No'}`;
+
+            document.getElementById(`enPassant${frameIndex}`).textContent =
+                state.enPassant || 'None';
+
+            document.getElementById(`moveCount${frameIndex}`).textContent =
+                state.moveCount;
+
+            // Highlight en passant target if it changed from previous state
+            if (frameIndex > 0) {
+                const prevEnPassant = gameStates[frameIndex - 1].enPassant;
+                const currEnPassant = state.enPassant;
+                const enPassantElement = document.getElementById(`enPassant${frameIndex}`);
+
+                if ((prevEnPassant === null && currEnPassant !== null) ||
+                    (prevEnPassant !== null && currEnPassant === null) ||
+                    (prevEnPassant !== null && currEnPassant !== null && prevEnPassant !== currEnPassant)) {
+                    enPassantElement.classList.add('highlight-change');
+                    // Remove highlight after animation
+                    setTimeout(() => {
+                        enPassantElement.classList.remove('highlight-change');
+                    }, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

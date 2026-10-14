@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Move Validator - Visualization Suite</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        h1 {
+            margin: 0 0 10px 0;
+        }
+        .subtitle {
+            color: #ecf0f1;
+            font-size: 18px;
+        }
+        .nav {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            padding: 30px;
+        }
+        .nav-card {
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 25px;
+            transition: all 0.3s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .nav-card:hover {
+            background-color: #e9ecef;
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+        .nav-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 20px;
+        }
+        .nav-card p {
+            color: #5d6d7e;
+            line-height: 1.6;
+        }
+        .nav-card .icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            display: block;
+            text-align: center;
+            color: #3498db;
+        }
+        .footer {
+            background-color: #ecf0f1;
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            background-color: #3498db;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Chess Move Validator</h1>
+            <div class="subtitle">Four-Layer Automata Theory Visualization Suite</div>
+            <p style="margin-top: 15px; color: #ecf0f1;">
+                Enhance your understanding of the computational theory behind chess move validation
+            </p>
+        </header>
+
+        <div class="nav">
+            <a href="visual_chess_board.html" class="nav-card">
+                <div class="icon">♟️</div>
+                <h3>Interactive Chess Board</h3>
+                <p>Visual representation of chess positions with piece movement visualization. See the board state evolve in real-time as moves are made and validated.</p>
+                <span class="badge">State Visualization</span>
+            </a>
+
+            <a href="automata_visualization.html" class="nav-card">
+                <div class="icon">🔬</div>
+                <h3>Automata Theory Deep Dive</h3>
+                <p>Explore the DFAs, FSMs, and logical operations that make up the four-layer architecture. See exactly how each layer validates different aspects of chess moves.</p>
+                <span class="badge">Theory Explanation</span>
+            </a>
+
+            <a href="game_state_evolution.html" class="nav-card">
+                <div class="icon">📊</div>
+                <h3>Game State Evolution</h3>
+                <p>Watch how internal game state changes through a sample game sequence. See turn alternation, castling rights, en passant tracking, and check detection in action.</p>
+                <span class="badge">Process Visualization</span>
+            </a>
+        </div>
+
+        <div class="footer">
+            <p>Created for educational demonstration of automata theory concepts in chess move validation</p>
+            <p>Each visualization can be opened independently in a web browser</p>
+            <p><em>No modifications made to original codebase - all visualizations are complementary artifacts</em></p>
+        </div>
+    </div>
+</body>
+</html>

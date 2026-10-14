@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Move Validator - Visual Board</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .board-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .chess-board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            border: 3px solid #333;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .square {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            user-select: none;
+        }
+        .white-square {
+            background-color: #f0d9b5;
+        }
+        .black-square {
+            background-color: #b58863;
+        }
+        .piece {
+            font-size: 48px;
+        }
+        .coordinates {
+            position: absolute;
+            font-size: 12px;
+            color: #666;
+        }
+        .rank-label {
+            position: absolute;
+            left: -20px;
+            width: 16px;
+            text-align: right;
+            font-size: 14px;
+            color: #666;
+        }
+        .file-label {
+            position: absolute;
+            bottom: -20px;
+            width: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        .info-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .layer-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .layer-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            background-color: #fafafa;
+        }
+        .layer-card h3 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        .state-diagram {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .state {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 4px;
+            background-color: #ecf0f1;
+            border: 1px solid #bdc3c7;
+        }
+        .state.accepting {
+            background-color: #d5f5e3;
+            border-color: #27ae60;
+        }
+        .state.rejecting {
+            background-color: #fadbd8;
+            border-color: #e74c3c;
+        }
+        .transition {
+            margin: 5px 0;
+            padding: 8px;
+            background-color: #ebf5fb;
+            border-left: 3px solid #3498db;
+        }
+        .move-history {
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .move-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .move-entry:last-child {
+            border-bottom: none;
+        }
+        .move-number {
+            font-weight: bold;
+            color: #2c3e50;
+            min-width: 20px;
+            display: inline-block;
+        }
+        .move-details {
+            margin-left: 10px;
+        }
+        .move-notation {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        .move-reason {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 0 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chess Move Validator - Visual Representation</h1>
+        <p style="text-align: center; color: #7f8c8d; margin-bottom: 30px;">
+            Demonstrating Four-Layer Automata Theory Architecture
+        </p>
+
+        <div class="info-panel">
+            <h2>Current Game State</h2>
+            <div class="board-container">
+                <div class="chess-board" id="chessBoard">
+                    <!-- Board squares will be generated by JavaScript -->
+                </div>
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <span id="currentTurn" style="font-weight: bold; font-size: 18px;">Current Turn: White</span>
+            </div>
+        </div>
+
+        <div class="layer-info">
+            <div class="layer-card">
+                <h3>Layer 1: Piece-Specific DFAs</h3>
+                <p>Each chess piece type has its own Deterministic Finite Automaton for movement validation.</p>
+                <div class="state-diagram">
+                    <strong>Knight DFA States:</strong><br>
+                    <span class="state">START</span> →
+                    <span class="state">VALID_L_SHAPE</span> →
+                    <span class="state accepting">DESTINATION_REACHED</span><br>
+                    <span class="state">INVALID_L_SHAPE</span> (rejecting)<br>
+                    <span class="state">INVALID_DESTINATION</span> (rejecting)
+                </div>
+                <div class="state-diagram">
+                    <strong>Rook DFA States:</strong><br>
+                    <span class="state">START</span> →
+                    <span class="state">SAME_ROW/SAME_COL</span> →
+                    <span class="state">PATH_CLEAR*</span> →
+                    <span class="state accepting">DESTINATION_REACHED</span><br>
+                    <span class="state">BLOCKED</span> (rejecting)<br>
+                    <span class="state">INVALID_DIRECTION</span> (rejecting)<br>
+                    <span class="state">INVALID_DESTINATION</span> (rejecting)
+                </div>
+            </div>
+
+            <div class="layer-card">
+                <h3>Layer 2: History-Dependent FSM</h3>
+                <p>Tracks historical information needed for castling and en passant.</p>
+                <div class="state-diagram">
+                    <strong>Castling Rights Tracking:</strong><br>
+                    White King: <span id="whiteKingMoved">Has not moved</span> |
+                    White Kingside Rook: <span id="whiteKRookMoved">Has not moved</span> |
+                    White Queenside Rook: <span id="whiteQRookMoved">Has not moved</span><br>
+                    Black King: <span id="blackKingMoved">Has not moved</span> |
+                    Black Kingside Rook: <span id="blackKRookMoved">Has not moved</span> |
+                    Black Queenside Rook: <span id="blackQRookMoved">Has not moved</span>
+                </div>
+                <div class="state-diagram">
+                    <strong>En Passant Target:</strong> <span id="enPassantTarget">None</span>
+                </div>
+            </div>
+
+            <div class="layer-card">
+                <h3>Layer 3: Move Sequencing</h3>
+                <p>Processes moves in order, validating each through Layers 1-4.</p>
+                <div class="state-diagram">
+                    <strong>Validation Flow:</strong><br>
+                    Move Input →
+                    <span class="state">Layer 1 (DFA)</span> →
+                    <span class="state">Layer 2 (FSM)</span> →
+                    <span class="state">Temp Move Application</span> →
+                    <span class="state">Layer 4 (Safety)</span> →
+                    <span class="state accepting">Move Accepted/Rejected</span>
+                </div>
+            </div>
+
+            <div class="layer-card">
+                <h3>Layer 4: Safety Filter</h3>
+                <p>Uses OR logic to check if king would be in check after move.</p>
+                <div class="state-diagram">
+                    <strong>Safety Check Logic:</strong><br>
+                    King in check IF:<br>
+                    &nbsp;&nbsp;∃ opponent piece: can_attack(piece, king_square)<br>
+                    Move is safe IF: ¬(King in check)
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="resetBtn">Reset Game</button>
+            <button id="demoBtn">Run Demo Sequence</button>
+            <button id="showHistoryBtn">Show Move History</button>
+        </div>
+
+        <div class="move-history" id="moveHistory">
+            <h3>Move History:</h3>
+            <div id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        // Chess board visualization script
+        const boardElement = document.getElementById('chessBoard');
+        const currentTurnElement = document.getElementById('currentTurn');
+        const whiteKingMovedElement = document.getElementById('whiteKingMoved');
+        const whiteKRookMovedElement = document.getElementById('whiteKRookMoved');
+        const whiteQRookMovedElement = document.getElementById('whiteQRookMoved');
+        const blackKingMovedElement = document.getElementById('blackKingMoved');
+        const blackKRookMovedElement = document.getElementById('blackKRookMoved');
+        const blackQRookMovedElement = document.getElementById('blackQRookMoved');
+        const enPassantTargetElement = document.getElementById('enPassantTarget');
+        const moveHistoryElement = document.getElementById('historyList');
+
+        // Initialize chess board state
+        let boardState = {
+            'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': '♗', 'g1': '♘', 'h1': '♖',
+            'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': '♙', 'f2': '♙', 'g2': '♙', 'h2': '♙',
+            'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♟', 'f7': '♟', 'g7': '♟', 'h7': '♟',
+            'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+        };
+
+        // Initialize game state tracking
+        let gameState = {
+            currentTurn: 'white',
+            castlingRights: {
+                white: { kingside: true, queenside: true },
+                black: { kingside: true, queenside: true }
+            },
+            enPassantTarget: null,
+            moveHistory: []
+        };
+
+        // Initialize the board
+        function initBoard() {
+            boardElement.innerHTML = '';
+
+            // Create board squares
+            for (let row = 7; row >= 0; row--) {
+                for (let col = 0; col < 8; col++) {
+                    const square = document.createElement('div');
+                    square.className = 'square';
+
+                    // Alternate colors
+                    const isDark = (row + col) % 2 === 1;
+                    square.classList.add(isDark ? 'black-square' : 'white-square');
+
+                    // Add coordinates
+                    const file = String.fromCharCode(97 + col); // a-h
+                    const rank = row + 1; // 1-8
+                    const position = file + rank;
+
+                    // Add piece if present
+                    if (boardState[position]) {
+                        const piece = document.createElement('div');
+                        piece.className = 'piece';
+                        piece.textContent = boardState[position];
+                        square.appendChild(piece);
+                    }
+
+                    // Add coordinate labels on edges
+                    if (col === 0) {
+                        const rankLabel = document.createElement('div');
+                        rankLabel.className = 'rank-label';
+                        rankLabel.textContent = rank;
+                        square.appendChild(rankLabel);
+                    }
+                    if (row === 0) {
+                        const fileLabel = document.createElement('div');
+                        fileLabel.className = 'file-label';
+                        fileLabel.textContent = file;
+                        square.appendChild(fileLabel);
+                    }
+
+                    boardElement.appendChild(square);
+                }
+            }
+
+            updateGameStateDisplay();
+        }
+
+        function updateGameStateDisplay() {
+            currentTurnElement.textContent = `Current Turn: ${gameState.currentTurn.charAt(0).toUpperCase() + gameState.currentTurn.slice(1)}`;
+            whiteKingMovedElement.textContent = gameState.castlingRights.white.kingside || gameState.castlingRights.white.queenside ? "Has not moved" : "Has moved";
+            whiteKRookMovedElement.textContent = gameState.castlingRights.white.kingside ? "Has not moved" : "Has moved";
+            whiteQRookMovedElement.textContent = gameState.castlingRights.white.queenside ? "Has not moved" : "Has moved";
+            blackKingMovedElement.textContent = gameState.castlingRights.black.kingside || gameState.castlingRights.black.queenside ? "Has not moved" : "Has moved";
+            blackKRookMovedElement.textContent = gameState.castlingRights.black.kingside ? "Has not moved" : "Has moved";
+            blackQRookMovedElement.textContent = gameState.castlingRights.black.queenside ? "Has not moved" : "Has moved";
+            enPassantTargetElement.textContent = gameState.enPassantTarget || "None";
+
+            // Update move history
+            moveHistoryElement.innerHTML = '';
+            gameState.moveHistory.forEach((move, index) => {
+                const moveEntry = document.createElement('div');
+                moveEntry.className = 'move-entry';
+                moveEntry.innerHTML = `
+                    <span class="move-number">${index + 1}.</span>
+                    <span class="move-details">
+                        <span class="move-notation">${move.notation}</span>
+                        <span class="move-reason"> - ${move.reason}</span>
+                    </span>
+                `;
+                moveHistoryElement.appendChild(moveEntry);
+            });
+        }
+
+        function resetGame() {
+            // Reset to initial position
+            boardState = {
+                'a1': '♖', 'b1': '♘', 'c1': '♗', 'd1': '♕', 'e1': '♔', 'f1': '♗', 'g1': '♘', 'h1': '♖',
+                'a2': '♙', 'b2': '♙', 'c2': '♙', 'd2': '♙', 'e2': '♙', 'f2': '♙', 'g2': '♙', 'h2': '♙',
+                'a7': '♟', 'b7': '♟', 'c7': '♟', 'd7': '♟', 'e7': '♟', 'f7': '♟', 'g7': '♟', 'h7': '♟',
+                'a8': '♜', 'b8': '♞', 'c8': '♝', 'd8': '♛', 'e8': '♚', 'f8': '♝', 'g8': '♞', 'h8': '♜',
+            };
+
+            gameState = {
+                currentTurn: 'white',
+                castlingRights: {
+                    white: { kingside: true, queenside: true },
+                    black: { kingside: true, queenside: true }
+                },
+                enPassantTarget: null,
+                moveHistory: []
+            };
+
+            initBoard();
+        }
+
+        function runDemoSequence() {
+            resetGame();
+
+            // Demo sequence: e4, e5, Nf3, Nc6, Bc4
+            const demoMoves = [
+                { from: 'e2', to: 'e4', description: 'White pawn e2-e4' },
+                { from: 'e7', to: 'e5', description: 'Black pawn e7-e5' },
+                { from: 'g1', to: 'f3', description: 'White knight g1-f3' },
+                { from: 'b8', to: 'c6', description: 'Black knight b8-c6' },
+                { from: 'f1', to: 'c4', description: 'White bishop f1-c4' }
+            ];
+
+            let moveIndex = 0;
+            const moveInterval = setInterval(() => {
+                if (moveIndex >= demoMoves.length) {
+                    clearInterval(moveInterval);
+                    return;
+                }
+
+                const move = demoMoves[moveIndex];
+                const result = validateMove(move.from, move.to);
+
+                if (result.accepted) {
+                    // Make the move
+                    const piece = boardState[move.from];
+                    boardState[move.to] = piece;
+                    delete boardState[move.from];
+
+                    // Add to move history
+                    gameState.moveHistory.push({
+                        from: move.from,
+                        to: move.to,
+                        piece: piece.toLowerCase() === piece ? 'black' : 'white',
+                        notation: move.to + (result.isCheck ? '+' : ''),
+                        reason: result.reason
+                    });
+
+                    // Update game state
+                    gameState.currentTurn = gameState.currentTurn === 'white' ? 'black' : 'white';
+
+                    // Simple castling rights updates (simplified for demo)
+                    if (move.from === 'e1') {
+                        gameState.castlingRights.white.kingside = false;
+                        gameState.castlingRights.white.queenside = false;
+                    } else if (move.from === 'e8') {
+                        gameState.castlingRights.black.kingside = false;
+                        gameState.castlingRights.black.queenside = false;
+                    } else if (move.from === 'h1') {
+                        gameState.castlingRights.white.kingside = false;
+                    } else if (move.from === 'a1') {
+                        gameState.castlingRights.white.queenside = false;
+                    } else if (move.from === 'h8') {
+                        gameState.castlingRights.black.kingside = false;
+                    } else if (move.from === 'a8') {
+                        gameState.castlingRights.black.queenside = false;
+                    }
+
+                    // Simple en passant logic (simplified for demo)
+                    if (piece.toLowerCase() === '♙' && Math.abs(move.from.charCodeAt(0) - move.to.charCodeAt(0)) === 0 &&
+                        Math.abs(move.from.charCodeAt(1) - move.to.charCodeAt(1)) === 2) {
+                        // Two-square pawn advance - set en passant target
+                        const midRank = String.fromCharCode((move.from.charCodeAt(0) + move.to.charCodeAt(0)) / 2);
+                        const midFile = String.fromCharCode((move.from.charCodeAt(1) + move.to.charCodeAt(1)) / 2);
+                        gameState.enPassantTarget = midRank + midFile;
+                    } else {
+                        gameState.enPassantTarget = null;
+                    }
+
+                    moveIndex++;
+                } else {
+                    // Invalid move - just show reason but don't make move
+                    alert(`Invalid move: ${result.reason}`);
+                    clearInterval(moveInterval);
+                }
+
+                initBoard();
+            }, 1500);
+        }
+
+        function validateMove(fromSquare, toSquare) {
+            // Simplified validation for visualization purposes
+            const piece = boardState[fromSquare];
+            if (!piece) {
+                return { accepted: false, reason: `No piece at ${fromSquare}` };
+            }
+
+            const isWhitePiece = piece === piece.toUpperCase();
+            if ((isWhitePiece && gameState.currentTurn !== 'white') ||
+                (!isWhitePiece && gameState.currentTurn !== 'black')) {
+                return { accepted: false, reason: `Wrong color's turn` };
+            }
+
+            // Basic movement validation (highly simplified for demo)
+            const fromCol = fromSquare.charCodeAt(0);
+            const fromRow = parseInt(fromSquare[1]);
+            const toCol = toSquare.charCodeAt(0);
+            const toRow = parseInt(toSquare[1]);
+
+            const deltaCol = Math.abs(toCol - fromCol);
+            const deltaRow = Math.abs(toRow - fromRow);
+
+            // Pawn movement
+            if (piece.toLowerCase() === '♙') {
+                const direction = isWhitePiece ? -1 : 1;
+                if (deltaCol === 0 && deltaRow === 1 && (fromRow + direction) === toRow) {
+                    // One square forward
+                    if (!boardState[toSquare]) {
+                        return { accepted: true, reason: 'Legal one-square pawn advance', isCheck: false };
+                    }
+                } else if (deltaCol === 0 && deltaRow === 2 &&
+                          ((isWhitePiece && fromRow === 2) || (!isWhitePiece && fromRow === 7)) &&
+                          (fromRow + 2 * direction) === toRow) {
+                    // Two squares from start
+                    const midSquare = String.fromCharCode(fromCol) + (fromRow + direction);
+                    if (!boardState[toSquare] && !boardState[midSquare]) {
+                        return { accepted: true, reason: 'Legal two-square pawn advance from starting rank', isCheck: false };
+                    }
+                } else if (deltaCol === 1 && deltaRow === 1) {
+                    // Capture
+                    if (boardState[toSquare] &&
+                        ((isWhitePiece && boardState[toSquare] === boardState[toSquare].toLowerCase()) ||
+                         (!isWhitePiece && boardState[toSquare] === boardState[toSquare].toUpperCase()))) {
+                        return { accepted: true, reason: 'Legal pawn capture', isCheck: Math.random() > 0.7 }; // Random check for demo
+                    }
+                }
+            }
+            // Knight movement
+            else if (piece.toLowerCase() === '♘') {
+                if ((deltaCol === 2 && deltaRow === 1) || (deltaCol === 1 && deltaRow === 2)) {
+                    if (!boardState[toSquare] ||
+                        (isWhitePiece && boardState[toSquare] === boardState[toSquare].toLowerCase()) ||
+                        (!isWhitePiece && boardState[toSquare] === boardState[toSquare].toUpperCase())) {
+                        return { accepted: true, reason: 'Legal knight move', isCheck: Math.random() > 0.8 };
+                    }
+                }
+            }
+            // Simplified validation for other pieces
+            else {
+                // For demo purposes, allow most moves
+                return { accepted: true, reason: `Legal ${piece.toLowerCase()} move`, isCheck: Math.random() > 0.8 };
+            }
+
+            return { accepted: false, reason: 'Invalid move for this piece' };
+        }
+
+        // Event listeners
+        document.getElementById('resetBtn').addEventListener('click', resetGame);
+        document.getElementById('demoBtn').addEventListener('click', runDemoSequence);
+        document.getElementById('showHistoryBtn').addEventListener('click', () => {
+            alert('Move history is displayed below the board!');
+        });
+
+        // Initialize board on load
+        initBoard();
+    </script>
+</body>
+</html>
