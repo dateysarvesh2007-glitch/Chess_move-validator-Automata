@@ -11,7 +11,7 @@ if engine_root not in sys.path:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import game, automata, dataset, admin, admin
+from app.routes import game, automata, dataset, admin
 
 app = FastAPI(
     title="ChessMove Validator API",
