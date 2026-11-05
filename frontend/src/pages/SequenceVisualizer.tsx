@@ -92,10 +92,15 @@ export const SequenceVisualizer: React.FC = () => {
       {boardPos && (
         <div className="flex flex-col items-center">
           <Chessboard
-            position={boardPos}
-            boardOrientation="white"
-            customBoardStyle={{ borderRadius: '0.75rem' }}
-          />
+  		options={{
+    			position: boardPos,
+    			boardOrientation: 'white',
+    			boardStyle: {
+      				borderRadius: '0.75rem',
+      				overflow: 'hidden',
+    			},
+  		}}
+	/>
           {steps.length > 0 && (
             <div className="mt-4 flex gap-4 items-center">
               <button
