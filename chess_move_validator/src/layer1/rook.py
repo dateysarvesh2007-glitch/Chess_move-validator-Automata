@@ -227,7 +227,7 @@ class RookDFA:
         Returns:
             str: Square in algebraic notation
         """
-        from ..coordinates import coordinates_to_square
+        from coordinates import coordinates_to_square
         return coordinates_to_square(pos[0], pos[1])
 
 

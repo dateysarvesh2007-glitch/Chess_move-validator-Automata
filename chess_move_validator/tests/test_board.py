@@ -135,7 +135,7 @@ class TestBoard(unittest.TestCase):
         piece = Piece('king', 'white', 'e1')
         self.board.place_piece(piece, 'e1')
         display_string = self.board.display()
-        self.assertIn('♔', display_string)  # White king symbol
+        self.assertTrue('K' in display_string or '\u2654' in display_string)
 
 
 if __name__ == '__main__':

@@ -303,6 +303,7 @@ class GameValidator:
         self.game_state.make_move(king_from, king_to)
         # Execute the rook move
         self.game_state.make_move(rook_from, rook_to)
+        self.game_state.current_turn = 'black' if self.game_state.current_turn == 'white' else 'white'
 
         # Determine if castling gives check (unlikely but possible)
         is_check = self._gives_check(self.game_state, king_from, king_to, color)
@@ -383,9 +384,9 @@ class GameValidator:
         """
         # Handle castling
         if move_str == "O-O":
-            return self._handle_castling('kingside')
+            return self._handle_castling(True)
         elif move_str == "O-O-O":
-            return self._handle_castling('queenside')
+            return self._handle_castling(False)
 
         # Initialize result
         result = {
@@ -597,6 +598,7 @@ class GameValidator:
             dict: Validation result
         """
         current_color = self.game_state.current_turn
+        kingside = (kingside is True or kingside == 'kingside')
 
         # Use existing castling validation
         castling_result = self.castling_validator.validate_castling(current_color, kingside)
@@ -624,6 +626,7 @@ class GameValidator:
         self.game_state.make_move(king_from, king_to)
         # Execute the rook move
         self.game_state.make_move(rook_from, rook_to)
+        self.game_state.current_turn = 'black' if self.game_state.current_turn == 'white' else 'white'
 
         # Determine if castling gives check
         is_check = self._gives_check(self.game_state, king_from, king_to, current_color)
