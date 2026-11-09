@@ -1,15 +1,18 @@
-"""
-Tests for en passant validation.
+﻿"""
+Regression tests for en passant validation.
+
+Tests Layer 2 historical requirements, Layer 3 move sequencing,
+and Layer 4 king-safety restrictions.
 """
 
 import unittest
 import sys
 import os
 
-# Add the src directory to the path so we can import modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from src.layer2.en_passant import EnPassantValidator
+from src.layer3.game_validator import GameValidator
 from src.game_state import GameState
 from src.board import Board
 from src.piece import Piece
@@ -18,121 +21,201 @@ from src.piece import Piece
 class TestEnPassant(unittest.TestCase):
 
     def setUp(self):
-        """Set up test fixtures before each test method."""
         self.game_state = GameState()
+        self.validator = GameValidator(self.game_state)
         self.en_passant_validator = EnPassantValidator(self.game_state)
 
+    def play_move(self, from_square, to_square):
+        """Validate and execute a normal move."""
+        result = self.validator.validate_move(from_square, to_square)
+
+        self.assertTrue(
+            result['accepted'],
+            f"{from_square}-{to_square} should be legal: {result['reason']}"
+        )
+
+        self.game_state.make_move(from_square, to_square)
+        return result
+
     def test_no_en_passant_initially(self):
-        """Test that there is no en passant target initially."""
-        target = self.en_passant_validator.history_fsm.get_en_passant_target()
-        self.assertIsNone(target, "Should be no en passant target initially")
+        """No en passant opportunity exists at the start of a game."""
+        self.assertIsNone(self.game_state.en_passant_target)
 
-        # Test validation fails when no opportunity exists
-        result = self.en_passant_validator.validate_en_passant('white', 'e5', 'd6')
+        result = self.validator.validate_move('e2', 'd3')
+
+        self.assertFalse(result['accepted'])
+        self.assertIn('en passant', result['reason'].lower())
+
+    def test_white_en_passant_capture(self):
+        """White can capture en passant after Black advances two squares."""
+        self.play_move('e2', 'e4')
+        self.play_move('a7', 'a6')
+        self.play_move('e4', 'e5')
+        self.play_move('d7', 'd5')
+
+        self.assertEqual(self.game_state.en_passant_target, 'd6')
+
+        result = self.validator.validate_move('e5', 'd6')
+
+        self.assertTrue(result['accepted'], result['reason'])
+        self.assertTrue(result.get('is_en_passant', False))
+
+        # Validation must not modify the actual board.
+        self.assertIsNotNone(self.game_state.board.get_piece('e5'))
+        self.assertIsNotNone(self.game_state.board.get_piece('d5'))
+        self.assertIsNone(self.game_state.board.get_piece('d6'))
+
+        # Execute the accepted move.
+        self.game_state.make_move('e5', 'd6')
+
+        self.assertIsNone(self.game_state.board.get_piece('e5'))
+        self.assertIsNone(self.game_state.board.get_piece('d5'))
+
+        captured_pawn = self.game_state.board.get_piece('d6')
+
+        self.assertIsNotNone(captured_pawn)
+        self.assertEqual(captured_pawn.piece_type, 'pawn')
+        self.assertEqual(captured_pawn.color, 'white')
+
+        self.assertIsNone(self.game_state.en_passant_target)
+        self.assertEqual(self.game_state.current_turn, 'black')
+
+    def test_black_en_passant_capture(self):
+        """Black can capture en passant after White advances two squares."""
+        self.play_move('a2', 'a3')
+        self.play_move('e7', 'e5')
+        self.play_move('a3', 'a4')
+        self.play_move('e5', 'e4')
+        self.play_move('d2', 'd4')
+
+        self.assertEqual(self.game_state.en_passant_target, 'd3')
+
+        result = self.validator.validate_move('e4', 'd3')
+
+        self.assertTrue(result['accepted'], result['reason'])
+        self.assertTrue(result.get('is_en_passant', False))
+
+        self.game_state.make_move('e4', 'd3')
+
+        self.assertIsNone(self.game_state.board.get_piece('e4'))
+        self.assertIsNone(self.game_state.board.get_piece('d4'))
+
+        capturing_pawn = self.game_state.board.get_piece('d3')
+
+        self.assertIsNotNone(capturing_pawn)
+        self.assertEqual(capturing_pawn.piece_type, 'pawn')
+        self.assertEqual(capturing_pawn.color, 'black')
+
+        self.assertIsNone(self.game_state.en_passant_target)
+        self.assertEqual(self.game_state.current_turn, 'white')
+
+    def test_en_passant_opportunity_expires(self):
+        """En passant is unavailable after the opponent makes another move."""
+        self.play_move('e2', 'e4')
+        self.play_move('a7', 'a6')
+        self.play_move('e4', 'e5')
+        self.play_move('d7', 'd5')
+
+        self.assertEqual(self.game_state.en_passant_target, 'd6')
+
+        self.play_move('g1', 'f3')
+
+        self.assertIsNone(self.game_state.en_passant_target)
+
+        self.play_move('a6', 'a5')
+
+        result = self.validator.validate_move('e5', 'd6')
+
+        self.assertFalse(result['accepted'])
+        self.assertIn('en passant', result['reason'].lower())
+
+    def test_en_passant_requires_previous_double_pawn_move(self):
+        """A diagonal move to an empty square is not automatically en passant."""
+        self.play_move('e2', 'e4')
+        self.play_move('a7', 'a6')
+        self.play_move('e4', 'e5')
+
+        self.assertIsNone(self.game_state.en_passant_target)
+
+        # Black must make a move so that it is White's turn again.
+        # Black does not advance a pawn two squares.
+        self.play_move('a6', 'a5')
+
+        self.assertIsNone(self.game_state.en_passant_target)
+
+        result = self.validator.validate_move('e5', 'd6')
+
+        self.assertFalse(result['accepted'])
+        self.assertIn('en passant', result['reason'].lower())
+
+    def test_en_passant_wrong_destination(self):
+        """The capturing pawn must move to the exact en passant target."""
+        self.play_move('e2', 'e4')
+        self.play_move('a7', 'a6')
+        self.play_move('e4', 'e5')
+        self.play_move('d7', 'd5')
+
+        result = self.en_passant_validator.validate_en_passant(
+            'white', 'e5', 'd5'
+        )
+
         self.assertFalse(result['valid'])
-        self.assertIn("No en passant opportunity", result['reason'])
+        self.assertIn('must be to square', result['reason'].lower())
 
-    def test_en_passant_setup(self):
-        """Test setting up an en passant opportunity."""
-        # Clear the board for a clean test
-        self.game_state.board = Board()
+    def test_en_passant_must_be_diagonal(self):
+        """En passant cannot be performed by moving straight forward."""
+        self.play_move('e2', 'e4')
+        self.play_move('a7', 'a6')
+        self.play_move('e4', 'e5')
+        self.play_move('d7', 'd5')
 
-        # Place white pawn on e2 and black pawn on e7
-        white_pawn = Piece('pawn', 'white', 'e2')
-        black_pawn = Piece('pawn', 'black', 'e7')
-        self.game_state.board.place_piece(white_pawn, 'e2')
-        self.game_state.board.place_piece(black_pawn, 'e7')
+        result = self.en_passant_validator.validate_en_passant(
+            'white', 'e5', 'e6'
+        )
 
-        # White pawn advances two squares to e4
-        # This should set up en passant target on e3
-        self.game_state.board.remove_piece('e2')
-        self.game_state.board.place_piece(white_pawn, 'e4')
-
-        # Manually set up the game state as if the move happened
-        # In reality, the GameState.make_move would do this
-        self.game_state.en_passant_target = 'e3'
-
-        # Now black pawn on e5 could capture en passant to d4 or f4
-        # But first, let's move black pawn to e5
-        self.game_state.board.remove_piece('e7')
-        black_pawn_advanced = Piece('pawn', 'black', 'e5')
-        self.game_state.board.place_piece(black_pawn_advanced, 'e5')
-
-        # Test black en passant capture to d4
-        result = self.en_passant_validator.validate_en_passant('black', 'e5', 'd4')
-        # This should work if there's a white pawn on d4 that just moved two squares
-        # But we don't have that setup, so let's create the proper scenario
-
-        # Actually, let's set up the full en passant scenario properly
-
-    def test_en_passant_capture_scenario(self):
-        """Test a complete en passant capture scenario."""
-        # Clear the board
-        self.game_state.board = Board()
-
-        # Set up the position: White pawn on e4, Black pawn on d5
-        # White pawn just moved from e2 to e4, so en passant target is e3
-        # Black pawn on d5 can capture en passant to e4
-
-        white_pawn = Piece('pawn', 'white', 'e4')
-        black_pawn = Piece('pawn', 'black', 'd5')
-        self.game_state.board.place_piece(white_pawn, 'e4')
-        self.game_state.board.place_piece(black_pawn, 'd5')
-
-        # Set en passant target (white pawn just moved two squares from e2 to e4)
-        self.game_state.en_passant_target = 'e3'
-
-        # Test black pawn capturing en passant
-        # Black pawn on d5 capturing to e4 (which is empty, but captures the pawn on e4)
-        # Actually, en passant capture moves to the square the pawn passed over
-        # So black pawn on d5 captures to e4 (removing white pawn from e4)
-        result = self.en_passant_validator.validate_en_passant('black', 'd5', 'e4')
-
-        # For this to be valid, we need:
-        # 1. En passant target exists (e3) - we have this
-        # 2. Target square matches en passant target? No - en passant capture goes to the square adjacent
-        #    Actually, black pawn on d5 captures en passant to e4, and the en passant target is e3
-        #    The captured pawn is on e4 (the square the white pawn passed through)
-
-        # Let me check the logic: en passant target is the square *behind' the pawn that just moved two squares
-        # So if white pawn moved e2->e4, en passant target is e3
-        # Black pawn on d5 can capture en passant by moving to e4 (capturing the white pawn on e4)
-
-        # But our validation checks if target_square == en_passant_target
-        # That's wrong! The en passant target is the square *passed over*, not the capture square
-
-        # Looking at the en_passant validator, I see the issue
-        # Let me check the actual implementation...
-
-        # For now, let's skip this detailed test and just test that the validator exists
-        self.assertIsInstance(self.en_passant_validator, EnPassantValidator)
-
-    def test_en_passant_timing(self):
-        """Test that en passant is only available immediately."""
-        # The en passant opportunity should disappear after one move
-        # This is handled by the GameState which clears en_passant_target
-        # after making a move that isn't a pawn double-advance
-        self.assertTrue(hasattr(self.en_passant_validator, 'history_fsm'))
-        self.assertTrue(hasattr(self.en_passant_validator.history_fsm, 'get_en_passant_target'))
-
-    def test_en_passant_direction(self):
-        """Test that en passant capture must be diagonal."""
-        # Set up en passant target
-        self.game_state.en_passant_target = 'e3'
-
-        # Test non-diagonal capture (should fail)
-        result = self.en_passant_validator.validate_en_passant('white', 'e5', 'e3')
         self.assertFalse(result['valid'])
-        self.assertIn("diagonal", result['reason'].lower())
 
-        # Test diagonal capture to wrong square (should fail)
-        result = self.en_passant_validator.validate_en_passant('white', 'd5', 'e3')
-        # This might be valid depending on setup - the target should be where capture happens
-        # Actually, from d5, en passant capture would be to e4 (if white pawn on e4 just moved from e2)
-        # And en passant target would be e3
-        # So d5 to e3 is not the right capture square
+    def test_en_passant_cannot_expose_king_to_check(self):
+        """
+        Reject en passant if removing both pawns exposes the moving
+        player's king to an opposing rook.
+        """
+        self.game_state.board = Board()
+        self.game_state.current_turn = 'white'
+        self.game_state.en_passant_target = 'd6'
 
-        self.assertIsInstance(self.en_passant_validator, EnPassantValidator)
+        self.game_state.board.place_piece(
+            Piece('king', 'white', 'e1'), 'e1'
+        )
+
+        self.game_state.board.place_piece(
+            Piece('pawn', 'white', 'e5'), 'e5'
+        )
+
+        self.game_state.board.place_piece(
+            Piece('pawn', 'black', 'd5'), 'd5'
+        )
+
+        self.game_state.board.place_piece(
+            Piece('rook', 'black', 'e8'), 'e8'
+        )
+
+        self.game_state.board.place_piece(
+            Piece('king', 'black', 'a8'), 'a8'
+        )
+
+        result = self.validator.validate_move('e5', 'd6')
+
+        self.assertFalse(result['accepted'])
+        self.assertTrue(result['reason'])
+
+        # Rejected move must leave the original position untouched.
+        self.assertIsNotNone(self.game_state.board.get_piece('e5'))
+        self.assertIsNotNone(self.game_state.board.get_piece('d5'))
+        self.assertIsNone(self.game_state.board.get_piece('d6'))
+
+        self.assertEqual(self.game_state.current_turn, 'white')
+        self.assertEqual(self.game_state.en_passant_target, 'd6')
 
 
 if __name__ == '__main__':

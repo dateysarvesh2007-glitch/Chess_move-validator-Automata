@@ -122,7 +122,9 @@ class GameState:
             moved_piece = from_piece
 
         # Update castling rights if king or rook moved
-        self._update_castling_rights(from_square, to_square, moved_piece)
+        self._update_castling_rights(
+    from_square, to_square, moved_piece, captured_piece
+)
 
         # Update en passant target
         self._update_en_passant_target(from_square, to_square, moved_piece, captured_piece)
@@ -146,37 +148,121 @@ class GameState:
 
         return move_record
 
-    def _update_castling_rights(self, from_square, to_square, moved_piece):
+
+    def make_castling_move(self, color, kingside):
         """
-        Update castling rights based on king or rook movement.
+        Execute an entire castling move as one atomic chess move.
 
-        Args:
-            from_square (str): Starting square
-            to_square (str): Destination square
-            moved_piece (Piece): The piece that was moved
+        The king and rook are moved together, one history record is
+        created, and the turn changes exactly once.
         """
-        if not moved_piece:
-            return
+        if color not in ("white", "black"):
+            raise ValueError("Invalid castling color")
 
-        # If king moves, lose both castling rights for that color
-        if moved_piece.piece_type == 'king':
-            self.castling_rights[moved_piece.color]['kingside'] = False
-            self.castling_rights[moved_piece.color]['queenside'] = False
+        if self.current_turn != color:
+            raise ValueError("It is not this player's turn to castle")
 
-        # If rook moves, lose castling rights on that side for that color
-        elif moved_piece.piece_type == 'rook':
-            # Determine which rook based on starting position
-            from_file = from_square[0]
-            if moved_piece.color == 'white':
-                if from_square == 'a1':
+        side = "kingside" if kingside else "queenside"
+        if not self.castling_rights.get(color, {}).get(side, False):
+            raise ValueError(f"{color.capitalize()} has no {side} castling rights")
+
+        if color == "white":
+            king_from = "e1"
+            king_to = "g1" if kingside else "c1"
+            rook_from = "h1" if kingside else "a1"
+            rook_to = "f1" if kingside else "d1"
+            path = ["f1", "g1"] if kingside else ["b1", "c1", "d1"]
+        else:
+            king_from = "e8"
+            king_to = "g8" if kingside else "c8"
+            rook_from = "h8" if kingside else "a8"
+            rook_to = "f8" if kingside else "d8"
+            path = ["f8", "g8"] if kingside else ["b8", "c8", "d8"]
+
+        king = self.board.get_piece(king_from)
+        rook = self.board.get_piece(rook_from)
+
+        if king is None or king.piece_type != "king" or king.color != color:
+            raise ValueError(f"No {color} king on {king_from}")
+
+        if rook is None or rook.piece_type != "rook" or rook.color != color:
+            raise ValueError(f"No {color} rook on {rook_from}")
+
+        for square in path:
+            if self.board.get_piece(square) is not None:
+                raise ValueError(f"Castling path is blocked at {square}")
+
+        # Remove both pieces before placing either one.
+        self.board.remove_piece(king_from)
+        self.board.remove_piece(rook_from)
+
+        self.board.place_piece(king, king_to)
+        king.position = king_to
+
+        self.board.place_piece(rook, rook_to)
+        rook.position = rook_to
+
+        # Moving the king permanently removes both castling rights.
+        self._update_castling_rights(king_from, king_to, king, None)
+
+        # Castling cannot create an en passant opportunity.
+        self.en_passant_target = None
+
+        move_record = {
+            "from": king_from,
+            "to": king_to,
+            "piece": "king",
+            "color": color,
+            "captured": None,
+            "is_capture": False,
+            "is_en_passant": False,
+            "is_promotion": False,
+            "promotion_piece": None,
+            "is_castling": True,
+            "kingside": kingside,
+            "rook_from": rook_from,
+            "rook_to": rook_to
+        }
+
+        self.move_history.append(move_record)
+
+        # One castling action means one turn change.
+        self.current_turn = "black" if color == "white" else "white"
+
+        return move_record
+
+
+    def _update_castling_rights(
+        self, from_square, to_square, moved_piece, captured_piece=None
+    ):
+        """Update castling rights after king/rook movement or rook capture."""
+
+        if moved_piece is not None:
+            if moved_piece.piece_type == 'king':
+                self.castling_rights[moved_piece.color]['kingside'] = False
+                self.castling_rights[moved_piece.color]['queenside'] = False
+
+            elif moved_piece.piece_type == 'rook':
+                if from_square == 'a1' and moved_piece.color == 'white':
                     self.castling_rights['white']['queenside'] = False
-                elif from_square == 'h1':
+                elif from_square == 'h1' and moved_piece.color == 'white':
                     self.castling_rights['white']['kingside'] = False
-            else:  # black
-                if from_square == 'a8':
+                elif from_square == 'a8' and moved_piece.color == 'black':
                     self.castling_rights['black']['queenside'] = False
-                elif from_square == 'h8':
+                elif from_square == 'h8' and moved_piece.color == 'black':
                     self.castling_rights['black']['kingside'] = False
+
+        # Capturing a rook on its original square removes its castling right.
+        if captured_piece is not None and captured_piece.piece_type == 'rook':
+            if to_square == 'a1' and captured_piece.color == 'white':
+                self.castling_rights['white']['queenside'] = False
+            elif to_square == 'h1' and captured_piece.color == 'white':
+                self.castling_rights['white']['kingside'] = False
+            elif to_square == 'a8' and captured_piece.color == 'black':
+                self.castling_rights['black']['queenside'] = False
+            elif to_square == 'h8' and captured_piece.color == 'black':
+                self.castling_rights['black']['kingside'] = False
+
 
     def _update_en_passant_target(self, from_square, to_square, moved_piece, captured_piece):
         """

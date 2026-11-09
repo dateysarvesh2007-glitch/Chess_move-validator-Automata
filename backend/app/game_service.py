@@ -164,89 +164,121 @@ class GameSession:
         self.validator = GameValidator(self.game_state)
         return True, "Previous move undone successfully", self.get_response()
 
+
     def make_move(self, from_square: str, to_square: str, promotion: Optional[str] = None) -> MoveResponse:
         current_color = self.game_state.current_turn
         piece = self.game_state.board.get_piece(from_square)
 
-        # Build step-by-step layer diagnostics
-        layer1_detail = LayerDetail(name="Layer 1: Per-Piece DFA", passed=True, status="ACCEPTED", details="Geometric step & clear line of sight verified")
-        layer2_detail = LayerDetail(name="Layer 2: History FSM", passed=True, status="NOT_APPLICABLE", details="No history-dependent rules required")
-        layer3_detail = LayerDetail(name="Layer 3: Game Sequence & Turn FSM", passed=True, status="ACCEPTED", details=f"Active turn ({current_color}) validated")
-        layer4_detail = LayerDetail(name="Layer 4: Safety & Check Filter", passed=True, status="ACCEPTED", details="Own king safe after virtual simulation")
+        layer1_detail = LayerDetail(
+            name="Layer 1: Per-Piece DFA",
+            passed=True,
+            status="ACCEPTED",
+            details="Geometric movement and path validation"
+        )
+        layer2_detail = LayerDetail(
+            name="Layer 2: History FSM",
+            passed=True,
+            status="NOT_APPLICABLE",
+            details="No history-dependent rules required"
+        )
+        layer3_detail = LayerDetail(
+            name="Layer 3: Game Sequence & Turn FSM",
+            passed=True,
+            status="ACCEPTED",
+            details=f"Active turn ({current_color}) validated"
+        )
+        layer4_detail = LayerDetail(
+            name="Layer 4: Safety & Check Filter",
+            passed=True,
+            status="ACCEPTED",
+            details="Own king safe after virtual simulation"
+        )
 
-        # Basic square format validation
-        if not from_square or not to_square or len(from_square) != 2 or len(to_square) != 2:
-            layer3_detail.passed = False
-            layer3_detail.status = "REJECTED"
-            layer3_detail.details = "Invalid square coordinate format"
+        def response(accepted, reason, notation="",
+                     is_check=False):
             return MoveResponse(
-                accepted=False,
-                reason="Invalid square format specified",
-                move_notation="",
-                is_check=False,
+                accepted=accepted,
+                reason=reason,
+                move_notation=notation,
+                is_check=is_check,
                 current_turn=self.game_state.current_turn,
                 fen=game_state_to_fen(self.game_state),
                 board=game_state_to_board_dict(self.game_state),
                 move_history=parse_history_records(self.game_state),
                 layer_analysis=LayerAnalysis(
-                    layer1=layer1_detail, layer2=layer2_detail, layer3=layer3_detail, layer4=layer4_detail
+                    layer1=layer1_detail,
+                    layer2=layer2_detail,
+                    layer3=layer3_detail,
+                    layer4=layer4_detail
                 )
             )
 
-        # Check piece ownership & turn
+        # Validate square format.
+        if (
+            not isinstance(from_square, str)
+            or not isinstance(to_square, str)
+            or len(from_square) != 2
+            or len(to_square) != 2
+        ):
+            layer3_detail.passed = False
+            layer3_detail.status = "REJECTED"
+            layer3_detail.details = "Invalid square coordinate format"
+            return response(False, "Invalid square format specified")
+
+        try:
+            start_row, start_col = square_to_coordinates(from_square)
+            end_row, end_col = square_to_coordinates(to_square)
+        except (ValueError, TypeError):
+            layer3_detail.passed = False
+            layer3_detail.status = "REJECTED"
+            layer3_detail.details = "Invalid square coordinate format"
+            return response(False, "Invalid square format specified")
+
+        # Validate piece existence and ownership.
         if piece is None:
             layer3_detail.passed = False
             layer3_detail.status = "REJECTED"
             layer3_detail.details = f"No piece found at {from_square}"
-            return MoveResponse(
-                accepted=False,
-                reason=f"No piece at starting position {from_square}",
-                move_notation="",
-                is_check=False,
-                current_turn=self.game_state.current_turn,
-                fen=game_state_to_fen(self.game_state),
-                board=game_state_to_board_dict(self.game_state),
-                move_history=parse_history_records(self.game_state),
-                layer_analysis=LayerAnalysis(
-                    layer1=layer1_detail, layer2=layer2_detail, layer3=layer3_detail, layer4=layer4_detail
-                )
+            return response(
+                False, f"No piece at starting position {from_square}"
             )
 
         if piece.color != current_color:
             layer3_detail.passed = False
             layer3_detail.status = "REJECTED"
-            layer3_detail.details = f"Piece belongs to {piece.color}, but active turn is {current_color}"
-            return MoveResponse(
-                accepted=False,
-                reason=f"The {from_square} piece belongs to {piece.color}, not {current_color}",
-                move_notation="",
-                is_check=False,
-                current_turn=self.game_state.current_turn,
-                fen=game_state_to_fen(self.game_state),
-                board=game_state_to_board_dict(self.game_state),
-                move_history=parse_history_records(self.game_state),
-                layer_analysis=LayerAnalysis(
-                    layer1=layer1_detail, layer2=layer2_detail, layer3=layer3_detail, layer4=layer4_detail
-                )
+            layer3_detail.details = (
+                f"Piece belongs to {piece.color}, "
+                f"but active turn is {current_color}"
+            )
+            return response(
+                False,
+                f"The {from_square} piece belongs to {piece.color}, "
+                f"not {current_color}"
             )
 
-        # Check if castling
-        start_col = square_to_coordinates(from_square)[1]
-        end_col = square_to_coordinates(to_square)[1]
-        is_castling = (piece.piece_type == 'king' and abs(end_col - start_col) == 2)
+        # Capture special-move information BEFORE executing the move.
+        is_castling = (
+            piece.piece_type == 'king'
+            and start_row == end_row
+            and abs(end_col - start_col) == 2
+        )
 
-        # Run core validation via GameValidator
-        validation_result = self.validator.validate_move(from_square, to_square)
+        is_en_passant = (
+            piece.piece_type == 'pawn'
+            and abs(end_col - start_col) == 1
+            and self.game_state.board.get_piece(to_square) is None
+            and to_square == self.game_state.en_passant_target
+        )
+
+        # Run the validator. It must not mutate the actual board.
+        validation_result = self.validator.validate_move(
+            from_square, to_square
+        )
 
         if not validation_result['accepted']:
             reason = validation_result['reason']
 
-            # Classify failure to appropriate layer
-            if "blocked" in reason.lower() or "cannot move" in reason.lower() or "occupied" in reason.lower() or "invalid" in reason.lower():
-                layer1_detail.passed = False
-                layer1_detail.status = "REJECTED"
-                layer1_detail.details = reason
-            elif "castle" in reason.lower() or "passant" in reason.lower():
+            if is_castling or is_en_passant:
                 layer2_detail.passed = False
                 layer2_detail.status = "REJECTED"
                 layer2_detail.details = reason
@@ -259,53 +291,62 @@ class GameSession:
                 layer1_detail.status = "REJECTED"
                 layer1_detail.details = reason
 
-            return MoveResponse(
-                accepted=False,
-                reason=reason,
-                move_notation="",
-                is_check=False,
-                current_turn=self.game_state.current_turn,
-                fen=game_state_to_fen(self.game_state),
-                board=game_state_to_board_dict(self.game_state),
-                move_history=parse_history_records(self.game_state),
-                layer_analysis=LayerAnalysis(
-                    layer1=layer1_detail, layer2=layer2_detail, layer3=layer3_detail, layer4=layer4_detail
-                )
+            return response(False, reason)
+
+        # Execute the accepted move exactly once.
+        if is_castling:
+            kingside = end_col > start_col
+
+            castling_move = self.validator.castling_validator.get_castling_move(
+                current_color, kingside
             )
 
-        # Move accepted: Apply to game_state if not already castled by validator
-        if not is_castling:
+            if castling_move is None:
+                return response(
+                    False, "Unable to determine castling moves"
+                )
+
+            king_from, king_to, rook_from, rook_to = castling_move
+
+            self.game_state.make_castling_move(
+                current_color, kingside
+            )
+
+            layer2_detail.status = "ACCEPTED"
+            layer2_detail.details = (
+                f"{'Kingside' if kingside else 'Queenside'} "
+                f"castling validated"
+            )
+
+        else:
             self.game_state.make_move(from_square, to_square)
 
-        # Save snapshot for undo
+            if is_en_passant:
+                layer2_detail.status = "ACCEPTED"
+                layer2_detail.details = (
+                    "En passant validated: opponent pawn advanced "
+                    "two squares on the immediately preceding move"
+                )
+
+        # Save snapshot after the complete move.
         self.state_snapshots.append(self.game_state.copy())
 
-        # Layer 2 notes if applicable
-        if is_castling:
-            layer2_detail.status = "ACCEPTED"
-            layer2_detail.details = f"Castling validated against unmoved King/Rook history tape"
-        elif piece.piece_type == 'pawn' and abs(end_col - start_col) == 1 and to_square == self.game_state.en_passant_target:
-            layer2_detail.status = "ACCEPTED"
-            layer2_detail.details = "En passant validated: opponent pawn two-step advance in immediately preceding halfmove"
-
         is_check = validation_result.get('is_check', False)
-        if is_check:
-            layer4_detail.details = "Move valid; delivered check to opponent King (+)"
 
-        return MoveResponse(
-            accepted=True,
-            reason=validation_result['reason'],
-            move_notation=validation_result.get('move_notation', f"{from_square}-{to_square}"),
-            is_check=is_check,
-            is_checkmate=False,
-            current_turn=self.game_state.current_turn,
-            fen=game_state_to_fen(self.game_state),
-            board=game_state_to_board_dict(self.game_state),
-            move_history=parse_history_records(self.game_state),
-            layer_analysis=LayerAnalysis(
-                layer1=layer1_detail, layer2=layer2_detail, layer3=layer3_detail, layer4=layer4_detail
+        if is_check:
+            layer4_detail.details = (
+                "Move valid; opponent king is in check"
             )
+
+        return response(
+            True,
+            validation_result['reason'],
+            validation_result.get(
+                'move_notation', f"{from_square}-{to_square}"
+            ),
+            is_check
         )
+
 
 
 class SessionManager:

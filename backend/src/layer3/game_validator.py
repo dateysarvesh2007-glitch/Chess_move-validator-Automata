@@ -63,23 +63,9 @@ class GameValidator:
         self.safety_filter = SafetyFilter(game_state)
         self.check_detector = CheckDetector(game_state)
 
+
     def validate_move(self, from_square, to_square):
-        """
-        Validate a chess move using all four layers.
-
-        Args:
-            from_square (str): Starting square (e.g., "e2")
-            to_square (str): Destination square (e.g., "e4")
-
-        Returns:
-            dict: Validation result with keys:
-                  - 'accepted': bool
-                  - 'reason': str
-                  - 'move_notation': str (e.g., "e4" or "e4+" for check)
-                  - 'is_check': bool (whether move gives check)
-                  - Additional move-specific info as needed
-        """
-        # Initialize result dictionary
+        """Validate a move without modifying the actual game state."""
         result = {
             'accepted': False,
             'reason': '',
@@ -87,73 +73,175 @@ class GameValidator:
             'is_check': False
         }
 
-        # STEP 0: Basic input validation
-        basic_validation = self._validate_basic_input(from_square, to_square)
-        if not basic_validation['valid']:
-            result['reason'] = basic_validation['reason']
+        basic = self._validate_basic_input(from_square, to_square)
+        if not basic['valid']:
+            result['reason'] = basic['reason']
             return result
 
-        # STEP 1: Determine whose turn it is and get the piece
-        current_color = self.game_state.current_turn
+        color = self.game_state.current_turn
         piece = self.game_state.board.get_piece(from_square)
 
-        # STEP 2: Check if there's a piece at the starting position
-        # Let the Layer 1 validator handle this to get specific messages like "No pawn at starting position"
-
-        # STEP 3: Check if it's the correct player's piece
         if piece is None:
-            # No piece at starting position - let Layer 1 validator handle this
-            pass
-        elif piece.color != current_color:
-            result['reason'] = f"The {from_square} piece belongs to {piece.color}, not {current_color}"
+            result['reason'] = f"No piece at {from_square}"
             return result
 
-        # STEP 4: Validate basic movement using Layer 1 (piece-specific DFA)
-        layer1_result = self._validate_layer1_movement(piece, from_square, to_square)
-        if not layer1_result['valid']:
-            result['reason'] = layer1_result['reason']
+        if piece.color != color:
+            result['reason'] = (
+                f"The {from_square} piece belongs to {piece.color}, "
+                f"not {color}"
+            )
             return result
 
-        # STEP 5: Validate history-dependent rules using Layer 2
-        layer2_result = self._validate_layer2_rules(piece, from_square, to_square, current_color)
-        if not layer2_result['valid']:
-            result['reason'] = layer2_result['reason']
+        start_row, start_col = square_to_coordinates(from_square)
+        end_row, end_col = square_to_coordinates(to_square)
+
+        is_castling = (
+            piece.piece_type == 'king'
+            and start_row == end_row
+            and abs(end_col - start_col) == 2
+        )
+
+        is_en_passant = (
+            piece.piece_type == 'pawn'
+            and abs(end_col - start_col) == 1
+            and self.game_state.board.get_piece(to_square) is None
+        )
+
+        # Layer 2 must handle special moves BEFORE Layer 1.
+        if is_castling:
+            layer2 = self.castling_validator.validate_castling(
+                color, end_col > start_col
+            )
+
+            if not layer2['valid']:
+                result['reason'] = layer2['reason']
+                return result
+
+            castling_move = self.castling_validator.get_castling_move(
+                color, layer2['kingside']
+            )
+
+            if castling_move is None:
+                result['reason'] = "Unable to determine castling moves"
+                return result
+
+            king_from, king_to, rook_from, rook_to = castling_move
+
+            # The king cannot castle out of check.
+            if self.check_detector.is_king_in_check(
+                self.game_state, color
+            ):
+                result['reason'] = "Cannot castle while the king is in check"
+                return result
+
+            opponent = 'black' if color == 'white' else 'white'
+
+            # Check the king's transit square on a simulated board.
+            transit_square = (
+                'f1' if color == 'white' and layer2['kingside']
+                else 'd1' if color == 'white'
+                else 'f8' if layer2['kingside']
+                else 'd8'
+            )
+
+            transit_state = self.game_state.copy()
+            transit_state.make_move(king_from, transit_square)
+
+            transit_safety = self.safety_filter.is_move_safe(
+                transit_state, king_from, transit_square, color
+            )
+
+            if not transit_safety['safe']:
+                result['reason'] = (
+                    "Cannot castle through an attacked square: "
+                    + transit_square
+                )
+                return result
+
+            # Simulate the complete castle, including the rook.
+            temp_state = self.game_state.copy()
+            temp_state.make_move(king_from, king_to)
+            temp_state.make_move(rook_from, rook_to)
+
+            final_safety = self.safety_filter.is_move_safe(
+                temp_state, king_from, king_to, color
+            )
+
+            if not final_safety['safe']:
+                result['reason'] = (
+                    "Cannot castle into check: " + final_safety['reason']
+                )
+                return result
+
+            is_check = self._gives_check(
+                temp_state, king_from, king_to, color
+            )
+
+            result.update({
+                'accepted': True,
+                'reason': (
+                    f"Legal {'kingside' if layer2['kingside'] else 'queenside'} "
+                    f"castling"
+                ),
+                'move_notation': king_to + ('+' if is_check else ''),
+                'is_check': is_check,
+                'is_castling': True,
+                'kingside': layer2['kingside']
+            })
             return result
 
-        # STEP 6: Check if the move is castling (special handling)
-        if piece.piece_type == 'king':
-            castling_result = self._validate_castling_move(piece, from_square, to_square, current_color)
-            if castling_result['valid']:
-                # Handle castling move execution
-                return self._execute_castling(castling_result, current_color)
-            # If not castling, continue with normal move validation
+        # En passant is checked by Layer 2, not the ordinary pawn DFA.
+        if is_en_passant:
+            layer2 = self.en_passant_validator.validate_en_passant(
+                color, from_square, to_square
+            )
 
-        # STEP 7: Apply/simulate the move temporarily
-        temp_game_state = self.game_state.copy()
-        move_record = temp_game_state.make_move(from_square, to_square)
+            if not layer2['valid']:
+                result['reason'] = layer2['reason']
+                return result
 
-        # STEP 8: Check king safety using Layer 4 (safety filter)
-        safety_result = self.safety_filter.is_move_safe(temp_game_state, from_square, to_square, current_color)
-        if not safety_result['safe']:
-            result['reason'] = safety_result['reason']
+        else:
+            # Ordinary moves must pass their Layer 1 DFA.
+            layer1 = self._validate_layer1_movement(
+                piece, from_square, to_square
+            )
+
+            if not layer1['valid']:
+                result['reason'] = layer1['reason']
+                return result
+
+        # Simulate the move on a COPY. Never mutate the real game state.
+        temp_state = self.game_state.copy()
+        temp_state.make_move(from_square, to_square)
+
+        safety = self.safety_filter.is_move_safe(
+            temp_state, from_square, to_square, color
+        )
+
+        if not safety['safe']:
+            result['reason'] = safety['reason']
             return result
 
-        # STEP 9: Check if the move gives check (to be added to output)
-        is_check = self._gives_check(temp_game_state, from_square, to_square, current_color)
+        is_check = self._gives_check(
+            temp_state, from_square, to_square, color
+        )
 
-        # STEP 10: Move is valid - prepare result (do NOT modify actual game state here)
-        # The caller is responsible for making the move if they want to execute it
-        result['accepted'] = True
-        result['move_notation'] = to_square
-        result['is_check'] = is_check
-
-        if is_check:
-            result['move_notation'] += '+'
-
-        # Generate appropriate reason message
-        result['reason'] = self._generate_accept_reason(piece, from_square, to_square, is_check)
+        result.update({
+            'accepted': True,
+            'reason': (
+                "Legal en passant capture"
+                if is_en_passant
+                else self._generate_accept_reason(
+                    piece, from_square, to_square, is_check
+                )
+            ),
+            'move_notation': to_square + ('+' if is_check else ''),
+            'is_check': is_check,
+            'is_en_passant': is_en_passant
+        })
 
         return result
+
 
     def _validate_basic_input(self, from_square, to_square):
         """Validate basic input format."""
@@ -203,38 +291,39 @@ class GameValidator:
 
         return validator.validate(self.game_state.board, from_square, to_square)
 
+
     def _validate_layer2_rules(self, piece, from_square, to_square, color):
-        """
-        Validate history-dependent rules using Layer 2 validators.
+        """Validate history-dependent special moves."""
 
-        Args:
-            piece (Piece): The piece to move
-            from_square (str): Starting square
-            to_square (str): Destination square
-            color (str): 'white' or 'black'
+        if piece is None:
+            return {'valid': False, 'reason': 'No piece at starting square'}
 
-        Returns:
-            dict: Validation result
-        """
-        # Handle castling separately (king moves two squares horizontally)
-        if piece.piece_type == 'king':
-            start_col = square_to_coordinates(from_square)[1]
-            end_col = square_to_coordinates(to_square)[1]
-            if abs(end_col - start_col) == 2:  # Castling move
-                return self.castling_validator.validate_castling(color, end_col > start_col)
+        start_row, start_col = square_to_coordinates(from_square)
+        end_row, end_col = square_to_coordinates(to_square)
 
-        # Handle en passant (pawn diagonal move to en passant target)
-        if piece.piece_type == 'pawn':
-            start_col = square_to_coordinates(from_square)[1]
-            end_col = square_to_coordinates(to_square)[1]
-            if abs(end_col - start_col) == 1:  # Diagonal move
-                # Check if destination is empty (en passant capture goes to empty square)
-                target_piece = self.game_state.board.get_piece(to_square)
-                if target_piece is None:  # Could be en passant
-                    return self.en_passant_validator.validate_en_passant(color, from_square, to_square)
+        if (
+            piece.piece_type == 'king'
+            and start_row == end_row
+            and abs(end_col - start_col) == 2
+        ):
+            return self.castling_validator.validate_castling(
+                color, end_col > start_col
+            )
 
-        # For all other moves, Layer 2 validation passes
-        return {'valid': True, 'reason': "No history-dependent rules apply to this move"}
+        if (
+            piece.piece_type == 'pawn'
+            and abs(end_col - start_col) == 1
+            and self.game_state.board.get_piece(to_square) is None
+        ):
+            return self.en_passant_validator.validate_en_passant(
+                color, from_square, to_square
+            )
+
+        return {
+            'valid': True,
+            'reason': 'No history-dependent rules apply'
+        }
+
 
     def _validate_castling_move(self, piece, from_square, to_square, color):
         """
@@ -299,11 +388,9 @@ class GameValidator:
 
         king_from, king_to, rook_from, rook_to = castling_move
 
-        # Execute the king move
-        self.game_state.make_move(king_from, king_to)
-        # Execute the rook move
-        self.game_state.make_move(rook_from, rook_to)
-        self.game_state.current_turn = 'black' if self.game_state.current_turn == 'white' else 'white'
+        self.game_state.make_castling_move(
+            color, castling_result.get('kingside', True)
+        )
 
         # Determine if castling gives check (unlikely but possible)
         is_check = self._gives_check(self.game_state, king_from, king_to, color)
@@ -587,63 +674,41 @@ class GameValidator:
 
         return True
 
+
     def _handle_castling(self, kingside):
-        """
-        Handle castling move.
+        """Validate and execute algebraic castling notation."""
 
-        Args:
-            kingside (bool): True for kingside, False for queenside
+        color = self.game_state.current_turn
+        king_square = 'e1' if color == 'white' else 'e8'
+        destination = (
+            ('g1' if color == 'white' else 'g8')
+            if kingside
+            else ('c1' if color == 'white' else 'c8')
+        )
 
-        Returns:
-            dict: Validation result
-        """
-        current_color = self.game_state.current_turn
-        kingside = (kingside is True or kingside == 'kingside')
+        result = self.validate_move(king_square, destination)
 
-        # Use existing castling validation
-        castling_result = self.castling_validator.validate_castling(current_color, kingside)
-        if not castling_result['valid']:
-            return {
-                'accepted': False,
-                'reason': castling_result['reason'],
-                'move_notation': '',
-                'is_check': False
-            }
+        if not result['accepted']:
+            return result
 
-        # Get the castling moves
-        castling_move = self.castling_validator.get_castling_move(current_color, kingside)
+        castling_move = self.castling_validator.get_castling_move(
+            color, kingside
+        )
+
         if castling_move is None:
             return {
                 'accepted': False,
-                'reason': "Unable to determine castling moves",
+                'reason': 'Unable to determine castling moves',
                 'move_notation': '',
                 'is_check': False
             }
 
         king_from, king_to, rook_from, rook_to = castling_move
 
-        # Execute the king move
-        self.game_state.make_move(king_from, king_to)
-        # Execute the rook move
-        self.game_state.make_move(rook_from, rook_to)
-        self.game_state.current_turn = 'black' if self.game_state.current_turn == 'white' else 'white'
-
-        # Determine if castling gives check
-        is_check = self._gives_check(self.game_state, king_from, king_to, current_color)
-
-        # Prepare result
-        result = {
-            'accepted': True,
-            'reason': castling_result['reason'],
-            'move_notation': king_to + ('+' if is_check else ''),
-            'is_check': is_check
-        }
-
-        # Add castling notation to reason if desired
-        castle_type = "kingside" if kingside else "queenside"
-        result['reason'] = f"Legal {castle_type} castling. {castling_result['reason']}"
+        self.game_state.make_castling_move(color, kingside)
 
         return result
+
 
     def _get_pawn_move_reason(self, from_square, to_square):
         """Generate specific reason for pawn moves."""

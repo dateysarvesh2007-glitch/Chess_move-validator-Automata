@@ -195,8 +195,17 @@ def validate_game_sequence(moves: List[str]) -> Tuple[bool, int, List[Dict[str, 
                     piece = game_state.board.get_piece(from_sq)
                     start_col = int(ord(from_sq[0]) - ord('a'))
                     end_col = int(ord(to_sq[0]) - ord('a'))
-                    is_castling = (piece and piece.piece_type == 'king' and abs(end_col - start_col) == 2)
-                    if not is_castling:
+                    is_castling = (
+                        piece
+                        and piece.piece_type == 'king'
+                        and abs(end_col - start_col) == 2
+                    )
+
+                    if is_castling:
+                        game_state.make_castling_move(
+                            turn, end_col > start_col
+                        )
+                    else:
                         game_state.make_move(from_sq, to_sq)
             else:
                 res = validator.parse_and_validate_algebraic_move(move_str)

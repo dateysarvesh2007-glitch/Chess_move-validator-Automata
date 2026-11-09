@@ -1,163 +1,107 @@
+
 """
-Castling validator that uses history-dependent information.
-This demonstrates Layer 2 of the four-layer architecture.
+Castling validator.
 
-The castling validator checks whether castling is legally possible
-by examining historical information tracked by the History FSM:
-- Whether the king has moved
-- Whether the relevant rook has moved
-- Whether squares between king and rook are empty
-- Whether the king is currently in check
-- Whether the king passes through or ends on attacked squares
+Layer 2 checks castling rights, the king and rook positions,
+and whether the squares between them are empty.
 
-Note: King safety (check) validation is performed by Layer 4.
-This layer focuses on the historical and positional requirements.
+Layer 4 king-safety checks are performed by GameValidator.
 """
-
-from .history_fsm import HistoryFSM
-from coordinates import square_to_coordinates, coordinates_to_square
-from piece import Piece
-
 
 class CastlingValidator:
-    """
-    Validates castling moves using historical game information.
-    """
-
     def __init__(self, game_state):
-        """
-        Initialize the castling validator.
-
-        Args:
-            game_state (GameState): The current game state
-        """
         self.game_state = game_state
-        self.history_fsm = HistoryFSM(game_state)
 
     def validate_castling(self, color, kingside):
-        """
-        Validate whether castling is currently possible.
-
-        Args:
-            color (str): 'white' or 'black'
-            kingside (bool): True for kingside castling, False for queenside
-
-        Returns:
-            dict: Validation result with 'valid' boolean and 'reason' string
-        """
-        # Determine which side we're checking
         side = 'kingside' if kingside else 'queenside'
 
-        # Check 1: Has the king moved?
-        if self.history_fsm.has_king_moved(color):
+        if color not in ('white', 'black'):
             return {
                 'valid': False,
-                'reason': f"Castling is illegal because the {color} king has moved"
+                'reason': 'Invalid player color'
             }
 
-        # Check 2: Has the relevant rook moved?
-        if self.history_fsm.has_rook_moved(color, side):
-            rook_side = "kingside" if kingside else "queenside"
+        rights = self.game_state.castling_rights.get(color, {})
+
+        # The recorded castling right is authoritative.
+        if not rights.get(side, False):
             return {
                 'valid': False,
-                'reason': f"Castling is illegal because the {color} {rook_side} rook has moved"
+                'reason': f"{color.capitalize()} no longer has {side} castling rights"
             }
 
-        # Check 3: Are the squares between king and rook empty?
-        if not self._is_path_clear(color, kingside):
+        king_square = 'e1' if color == 'white' else 'e8'
+
+        if kingside:
+            rook_square = 'h1' if color == 'white' else 'h8'
+            path_squares = (
+                ['f1', 'g1'] if color == 'white'
+                else ['f8', 'g8']
+            )
+        else:
+            rook_square = 'a1' if color == 'white' else 'a8'
+            path_squares = (
+                ['b1', 'c1', 'd1'] if color == 'white'
+                else ['b8', 'c8', 'd8']
+            )
+
+        king = self.game_state.board.get_piece(king_square)
+        rook = self.game_state.board.get_piece(rook_square)
+
+        if (
+            king is None
+            or king.piece_type != 'king'
+            or king.color != color
+        ):
             return {
                 'valid': False,
-                'reason': f"Castling is illegal because there are pieces blocking the path"
+                'reason': f"No {color} king on {king_square}"
             }
 
-        # Note: The following checks are typically handled by Layer 4 (safety filter):
-        # - Is the king currently in check? (Layer 4)
-        # - Does the king pass through check? (Layer 4)
-        # - Does the king end up in check? (Layer 4)
-        #
-        # For educational purposes, we'll note what Layer 2 checks vs what Layer 4 checks
+        if (
+            rook is None
+            or rook.piece_type != 'rook'
+            or rook.color != color
+        ):
+            return {
+                'valid': False,
+                'reason': f"No {color} rook on {rook_square}"
+            }
+
+        # Every square between the king and rook must be empty.
+        for square in path_squares:
+            if self.game_state.board.get_piece(square) is not None:
+                return {
+                    'valid': False,
+                    'reason': f"Castling path is blocked at {square}"
+                }
 
         return {
             'valid': True,
-            'reason': f"All historical requirements for {color} {'kingside' if kingside else 'queenside'} castling are satisfied"
+            'kingside': kingside,
+            'reason': (
+                f"Historical and positional requirements for "
+                f"{color} {side} castling are satisfied"
+            )
         }
 
-    def _is_path_clear(self, color, kingside):
-        """
-        Check if the castling path is clear based on piece types.
-        For castling to be possible, the relevant squares must be empty
-        or contain friendly pieces that are not pawns (which don't block castling).
-
-        Args:
-            color (str): 'white' or 'black'
-            kingside (bool): True for kingside, False for queenside
-
-        Returns:
-            bool: True if path is clear, False otherwise
-        """
-        if color == 'white':
-            king_row = 0  # Rank 1 -> row 0
-            if kingside:
-                # Kingside: check f1 (column 5) - must be empty or have non-pawn friendly piece
-                cols_to_check = [5]
-            else:
-                # Queenside: check d1 (column 3) - must be empty or have non-pawn friendly piece
-                cols_to_check = [3]
-        else:  # black
-            king_row = 7  # Rank 8 -> row 7
-            if kingside:
-                # Kingside: check f8 (column 5) - must be empty or have non-pawn friendly piece
-                cols_to_check = [5]
-            else:
-                # Queenside: check d8 (column 3) - must be empty or have non-pawn friendly piece
-                cols_to_check = [3]
-
-        # Check if the relevant squares are empty or have friendly non-pawn pieces
-        for col in cols_to_check:
-            piece = self.game_state.board.get_piece_at(king_row, col)
-            if piece is not None:
-                # If there's a piece, it must be a friendly non-pawn to not block castling
-                if piece.color != color or piece.piece_type == 'pawn':
-                    return False  # Blocked by enemy piece or pawn
-        return True  # Path is clear (empty or friendly non-pawn pieces)
-
     def get_castling_move(self, color, kingside):
-        """
-        Get the standard castling move notation if castling is valid.
-
-        Args:
-            color (str): 'white' or 'black'
-            kingside (bool): True for kingside castling, False for queenside
-
-        Returns:
-            tuple: (king_from, king_to, rook_from, rook_to) or None if invalid
-        """
         validation = self.validate_castling(color, kingside)
+
         if not validation['valid']:
             return None
 
         if color == 'white':
-            king_from = 'e1'
             if kingside:
-                king_to = 'g1'
-                rook_from = 'h1'
-                rook_to = 'f1'
-            else:
-                king_to = 'c1'
-                rook_from = 'a1'
-                rook_to = 'd1'
-        else:  # black
-            king_from = 'e8'
-            if kingside:
-                king_to = 'g8'
-                rook_from = 'h8'
-                rook_to = 'f8'
-            else:
-                king_to = 'c8'
-                rook_from = 'a8'
-                rook_to = 'd8'
+                return ('e1', 'g1', 'h1', 'f1')
+            return ('e1', 'c1', 'a1', 'd1')
 
-        return (king_from, king_to, rook_from, rook_to)
+        if color == 'black':
+            if kingside:
+                return ('e8', 'g8', 'h8', 'f8')
+            return ('e8', 'c8', 'a8', 'd8')
+
+        return None
 
 
 # Automata Theory Notes for Castling Validator:
